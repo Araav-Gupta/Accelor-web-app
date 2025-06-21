@@ -138,10 +138,10 @@ mongoose.connect(process.env.MONGO_URI)
 
 // Socket.io events
 io.on('connection', socket => {
+  console.log('Namespace:', socket.nsp.name); // Should be '/'
   console.log('User connected:', socket.id);
-
-  // Join room based on employeeId from query
   const { employeeId } = socket.handshake.query;
+  console.log('Handshake query:', socket.handshake.query);
   if (employeeId) {
     socket.join(employeeId);
     console.log(`Socket ${socket.id} joined room ${employeeId}`);
@@ -149,7 +149,6 @@ io.on('connection', socket => {
     console.warn(`Socket ${socket.id} connected without employeeId`);
   }
 
-  // Handle explicit 'join' event (for compatibility)
   socket.on('join', userId => {
     if (userId) {
       socket.join(userId);
