@@ -4,7 +4,7 @@ import { createDrawerNavigator, DrawerContentScrollView, DrawerItemList, DrawerI
 import { createStackNavigator } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
 // Notification functionality commented out
-// import NotificationBell from '../components/Notification.jsx';
+import NotificationBell from '../components/Notification.jsx';
 import Profile from '../components/Profile.jsx';
 import LeaveForm from '../components/LeaveForm';
 import ODForm from '../components/ODForm';
@@ -16,7 +16,7 @@ import { useNavigation, CommonActions } from '@react-navigation/native';
 import { AuthContext } from '../context/AuthContext';
 import EmployeeList from '../components/EmployeeList.jsx';
 import HODEmployeeProfile from '../components/HODEmployeeProfile.jsx';
-
+import OTRequest from '../components/OTRequest.jsx';
 // import Reports from '../components/Reports';
 
 const Drawer = createDrawerNavigator();
@@ -94,8 +94,9 @@ const HODDashboard = () => {
           headerTitle: 'Employee Dashboard',
           headerStyle: { backgroundColor: '#6b21a8' },
           headerTintColor: '#fff',
+          headerShown: true,
           // Notification functionality commented out
-          // headerRight: () => <NotificationBell />,
+          headerRight: () => <NotificationBell />,
           drawerIcon: ({ color }) => (
             <Ionicons name="speedometer" size={20} color={color} />
           )
@@ -113,7 +114,7 @@ const HODDashboard = () => {
           headerStyle: { backgroundColor: '#6b21a8' },
           headerTintColor: '#fff',
           // Notification functionality commented out
-          // headerRight: () => <NotificationBell />,
+          headerRight: () => <NotificationBell />,
           drawerIcon: ({ color }) => (
             <Ionicons name="person" size={20} color={color} />
           )
@@ -127,7 +128,7 @@ const HODDashboard = () => {
           headerStyle: { backgroundColor: '#6b21a8' },
           headerTintColor: '#fff',
           // Notification functionality commented out
-          // headerRight: () => <NotificationBell />,
+          headerRight: () => <NotificationBell />,
           drawerIcon: ({ color }) => (
             <Ionicons name="calendar" size={20} color={color} />
           )
@@ -141,7 +142,7 @@ const HODDashboard = () => {
           headerStyle: { backgroundColor: '#6b21a8' },
           headerTintColor: '#fff',
           // Notification functionality commented out
-          // headerRight: () => <NotificationBell />,
+          headerRight: () => <NotificationBell />,
           drawerIcon: ({ color }) => (
             <Ionicons name="document" size={20} color={color} />
           )
@@ -155,7 +156,7 @@ const HODDashboard = () => {
           headerStyle: { backgroundColor: '#6b21a8' },
           headerTintColor: '#fff',
           // Notification functionality commented out
-          // headerRight: () => <NotificationBell />,
+          headerRight: () => <NotificationBell />,
           drawerIcon: ({ color }) => (
             <Ionicons name="time" size={20} color={color} />
           )
@@ -170,7 +171,7 @@ const HODDashboard = () => {
           headerStyle: { backgroundColor: '#6b21a8' },
           headerTintColor: '#fff',
           // Notification functionality commented out
-          // headerRight: () => <NotificationBell />,
+          headerRight: () => <NotificationBell />,
           drawerIcon: ({ color }) => (
             <Ionicons name="document-text" size={20} color={color} />
           )
@@ -184,9 +185,25 @@ const HODDashboard = () => {
           headerStyle: { backgroundColor: '#6b21a8' },
           headerTintColor: '#fff',
           // Notification functionality commented out
-          // headerRight: () => <NotificationBell />,
+          headerRight: () => <NotificationBell />,
           drawerIcon: ({ color }) => (
-            <Ionicons name="calendar" size={20} color={color} />
+            <Ionicons name="document-text" size={20} color={color} />
+          )
+        }}
+      />
+
+<Drawer.Screen
+        name="OT Requests"
+        component={OTRequest}
+        options={{
+          // title: 'Employee Portal',
+          headerTitle: 'OT Requests',
+          headerStyle: { backgroundColor: '#6b21a8' },
+          headerTintColor: '#fff',
+          // Notification functionality commented out
+          headerRight: () => <NotificationBell />,
+          drawerIcon: ({ color }) => (
+            <Ionicons name="document-text" size={20} color={color} />
           )
         }}
       />
@@ -198,9 +215,9 @@ const HODDashboard = () => {
           headerStyle: { backgroundColor: '#6b21a8' },
           headerTintColor: '#fff',
           // Notification functionality commented out
-          // headerRight: () => <NotificationBell />,
+          headerRight: () => <NotificationBell />,
           drawerIcon: ({ color }) => (
-            <Ionicons name="calendar" size={20} color={color} />
+            <Ionicons name="list" size={20} color={color} />
           )
         }}
       />

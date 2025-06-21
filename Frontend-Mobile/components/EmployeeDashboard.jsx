@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Button,
   Image,
+  Alert,
 } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { AuthContext } from '../context/AuthContext.jsx';
@@ -20,6 +21,7 @@ function EmployeeDashboard() {
   const { user } = useContext(AuthContext);
   const [userName, setUserName] = useState('');
   const [designation, setDesignation] = useState('');
+  const [claimingId, setClaimingId] = useState(null);
   const [data, setData] = useState({
     attendanceData: [],
     leaveDaysTaken: { monthly: 0, yearly: 0 },
@@ -41,7 +43,6 @@ function EmployeeDashboard() {
 
   const calculateAttendanceStats = useCallback(() => {
     if (!Array.isArray(data.attendanceData)) return { present: 0, absent: 0, leave: 0 };
-    console.log('Attendance Data:', data.attendanceData);
     const stats = { present: 0, absent: 0, leave: 0, half: 0 };
     data.attendanceData.forEach(day => {
       if (day.status === 'present') stats.present++;
@@ -65,7 +66,6 @@ function EmployeeDashboard() {
       restricted: formatNumber(data.restrictedHolidays)
     };
 
-    console.log('Formatted leave stats:', stats);
     return stats;
   }, [data, attendanceView, isEligible]);
 
@@ -78,7 +78,6 @@ function EmployeeDashboard() {
     try {
       setLoading(true);
       setError(null);
-      console.log('Fetching dashboard data for employee:', user);
       
       const me = await api.get(`/auth/me`);
       setUserName(me.data.name);
@@ -128,41 +127,72 @@ function EmployeeDashboard() {
       }
 
       // Fetch attendance data with current view
-      console.log('Attendance View:', attendanceView)
       const Records = await api.get(`/dashboard/employee-stats?attendanceView=${attendanceView}&fromDate=${fromDate.toISOString()}&toDate=${toDate.toISOString()}`);
 
-      const leaveData = Records.data;
-
-      let otData = { claimed: [], unclaimed: [] };
-      if (isDeptEligible) {
-        // Fetch OT records with yearly view to get all records
-        otData = Records.data;
-      }
+      const leaveData = await api.get(`/dashboard/employee-stats?attendanceView=yearly&fromDate=${fromDate.toISOString()}&toDate=${toDate.toISOString()}`);
 
       // Update state with fetched data
-      setData({
+      const newData = {
         attendanceData: Records.data.attendanceData || [],
         leaveDaysTaken: {
-          monthly: leaveData.monthly,
-          yearly: leaveData.yearly
+          monthly: leaveData.data.monthly,
+          yearly: leaveData.data.yearly
         },
         paidLeavesRemaining: {
           monthly: paidLeaves,
           yearly: employeeType === 'Confirmed' ? paidLeaves : 0,
         },
-        unpaidLeavesTaken: leaveData.unpaidLeavesTaken,
+        unpaidLeavesTaken: leaveData.data.unpaidLeavesTaken,
         restrictedHolidays: restrictedHolidays,
         compensatoryLeaves: compensatoryLeaves,
-        compensatoryAvailable: leaveData.compensatoryAvailable,
-        otClaimRecords: otData.claimed || [],
-        unclaimedOTRecords: otData.unclaimed || [],
-      });
+        compensatoryAvailable: leaveData.data.compensatoryAvailable || [],
+      };
+
+      if (isDeptEligible) {
+        // Add OT records if eligible
+
+        newData.unclaimedOTRecords = leaveData.data.unclaimedOTRecords || [];
+        console.log('Fetchend unclaimed OT Records:',{
+          unclaimed: newData.unclaimedOTRecords})
+      } else {
+        // Ensure empty arrays if not eligible
+        newData.otClaimRecords = [];
+        newData.unclaimedOTRecords = [];
+      }
+
+      setData(newData);
     } catch (err) {
       setError(err.message || 'Failed to fetch dashboard data');
     } finally {
       setLoading(false);
     }
   }, [attendanceView]);
+
+  const handleClaimOT = async (record) => {
+    try {
+      setClaimingId(record._id);
+      
+      const response = await api.post('/ot', {
+        date: record.date,
+        hours: parseFloat(record.hours),
+        projectDetails: {
+          projectName: 'Regular Work',
+          description: 'Overtime claim'
+        },
+        claimType: 'overtime'
+      });
+
+      // Refresh dashboard data to show updated records
+      await fetchData();
+      
+      Alert.alert('Success', 'OT claim submitted successfully!');
+    } catch (error) {
+      console.error('Error claiming OT:', error);
+      Alert.alert('Error', error.response?.data?.error || 'Failed to submit OT claim');
+    } finally {
+      setClaimingId(null);
+    }
+  };
 
   useEffect(() => {
     if (!user?.employeeId) return;
@@ -175,9 +205,6 @@ function EmployeeDashboard() {
     });
 
     socketInstance.on('dashboard-update', fetchData);
-    socketInstance.on('connect', () => console.log('WebSocket connected'));
-    socketInstance.on('disconnect', () => console.log('WebSocket disconnected'));
-    socketInstance.on('error', error => console.error('WebSocket error:', error));
 
     setSocket(socketInstance);
     return () => socketInstance.disconnect();
@@ -338,13 +365,83 @@ function EmployeeDashboard() {
 
         {isEligible && (
           <View style={styles.otContainer}>
-            <Text style={styles.sectionTitle}>OT Records</Text>
-            {data.otClaimRecords.map((record, index) => (
-              <View key={index} style={styles.otRecord}>
-                <Text style={styles.otRecordDate}>{record.date}</Text>
-                <Text style={styles.otRecordHours}>{record.hours} hours</Text>
-              </View>
-            ))}
+            <Text style={styles.sectionTitle}>Pending OT Claims</Text>
+            {data.unclaimedOTRecords && (() => {
+              console.log('Original unclaimedOTRecords:', data.unclaimedOTRecords);
+              
+              const claimableRecords = data.unclaimedOTRecords.filter(record => {
+                // Convert hours to number and ensure it's at least 1
+                const hoursNum = parseFloat(record.hours) || 0;
+                const hasValidHours = hoursNum >= 1;
+                const isBeforeDeadline = !record.claimDeadline || new Date(record.claimDeadline) > new Date();
+                const isClaimable = hasValidHours && isBeforeDeadline;
+                
+                console.log('Record:', {
+                  id: record._id,
+                  date: record.date,
+                  hours: record.hours,
+                  hoursNum: hoursNum,
+                  claimDeadline: record.claimDeadline,
+                  currentTime: new Date().toISOString(),
+                  hasValidHours,
+                  isBeforeDeadline,
+                  isClaimable
+                });
+                
+                return isClaimable;
+              });
+              
+              console.log('Filtered claimableRecords:', claimableRecords);
+              
+              return claimableRecords.length > 0 ? (
+                claimableRecords.map((record, index) => (
+                  <View key={`unclaimed-${index}`} style={styles.otRecord}>
+                    <View style={styles.otRecordLeft}>
+                      <Text style={styles.otRecordDate}>
+                        {new Date(record.date).toLocaleDateString('en-US', {
+                          weekday: 'short',
+                          day: 'numeric',
+                          month: 'short',
+                        })}
+                      </Text>
+                      <Text style={styles.otRecordDeadline}>
+                        Claim by: {record.claimDeadline 
+                          ? new Date(record.claimDeadline).toLocaleString('en-US', {
+                              day: 'numeric',
+                              month: 'short',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })
+                          : 'End of next day' // Default text when claimDeadline is null
+                        }
+                      </Text>
+                    </View>
+                    <View style={styles.otRecordRight}>
+                      <Text style={styles.otRecordHours}>{record.hours} hrs</Text>
+                      <TouchableOpacity 
+                        style={[
+                          styles.claimButton, 
+                          (claimingId === record._id || (record.claimDeadline && new Date(record.claimDeadline) < new Date())) && 
+                          styles.claimButtonDisabled
+                        ]}
+                        onPress={() => handleClaimOT(record)}
+                        disabled={claimingId === record._id || (record.claimDeadline && new Date(record.claimDeadline) < new Date())}
+                      >
+                        {claimingId === record._id ? (
+                          <ActivityIndicator size="small" color="#ffffff" />
+                        ) : (
+                          <Text style={styles.claimButtonText}>
+                            {record.claimDeadline && new Date(record.claimDeadline) < new Date() ? 'Expired' : 'Claim'}
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.noRecordsText}>No pending OT claims found</Text>
+              );
+            })()}
           </View>
         )}
 
@@ -466,10 +563,103 @@ const styles = StyleSheet.create({
 
   },
   otContainer: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
+    marginTop: 20,
+    padding: 15,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  otSubtitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6b21a8',
+    marginBottom: 10,
+    marginTop: 5,
+  },
+  otRecord: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: '#f9fafb',
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  otRecordLeft: {
+    flex: 1,
+    marginRight: 10,
+  },
+  otRecordRight: {
+    alignItems: 'flex-end',
+  },
+  otRecordDate: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1f2937',
+    marginBottom: 2,
+  },
+  otRecordDeadline: {
+    fontSize: 12,
+    color: '#ef4444',
+    marginTop: 2,
+  },
+  otProject: {
+    fontSize: 12,
+    color: '#4b5563',
+    marginTop: 3,
+  },
+  otRecordHours: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginBottom: 3,
+  },
+  otStatus: {
+    fontSize: 12,
+    fontWeight: '500',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  statusApproved: {
+    backgroundColor: '#dcfce7',
+    color: '#166534',
+  },
+  statusRejected: {
+    backgroundColor: '#fee2e2',
+    color: '#991b1b',
+  },
+  statusPending: {
+    backgroundColor: '#fef3c7',
+    color: '#92400e',
+  },
+  claimButton: {
+    backgroundColor: '#6b21a8',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 4,
+    marginTop: 4,
+  },
+  claimButtonText: {
+    color: '#ffffff',
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  claimButtonDisabled: {
+    backgroundColor: '#9ca3af',
+  },
+  noRecordsText: {
+    color: '#6b7280',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginVertical: 8,
+  },
+  shadowContainer: {
     shadowColor: '#000',
     shadowOffset: {
       width: 0,

@@ -523,6 +523,7 @@ const LeaveForm = ({ navigation }) => {
               <View>
                 <LeaveTypeSelector
                   leaveType={form.leaveType}
+                  userDepartment={user?.department?.name}
                   setLeaveType={(value) => {
                     console.log('Setting leave type to:', value);
                     let leaveTypeValue = '';

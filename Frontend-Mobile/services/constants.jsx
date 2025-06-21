@@ -12,3 +12,5 @@ export const LEAVE_TYPES = [
   export const SESSIONS = ['forenoon', 'afternoon'];
   
   export const RESTRICTED_HOLIDAYS = ['Diwali', 'Christmas', 'Eid'];
+
+  export const eligibleDepartments = ['Production', 'Testing', 'AMETL', 'Admin'];

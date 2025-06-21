@@ -77,9 +77,9 @@ const AppContent = () => {
 const App = () => {
   return (
     <AuthProvider>
-      
+      <NotificationProvider>
         <AppContent />
-
+      </NotificationProvider>
     </AuthProvider>
   );
 };
