@@ -11,6 +11,7 @@ import ApproveOT from '../components/OTApproval';
 import PunchMissedForm from '../components/PunchMissedForm';
 import PunchMissedList from '../components/PunchMissedList';
 import PayrollDownloadForm from '../components/PayrollDownloadForm';
+import GenerateLetters from '../components/GenerateLetters';
 
 function Admin() {
   return (
@@ -28,6 +29,7 @@ function Admin() {
           <Route path="punch-missed" element={<PunchMissedForm />} />
           <Route path="approve-punch-missed" element={<PunchMissedList />} />
           <Route path="payroll-download" element={<PayrollDownloadForm />} />
+          <Route path="/generate-letters" element={<GenerateLetters />} />
         </Routes>
       </div>
     </div>
