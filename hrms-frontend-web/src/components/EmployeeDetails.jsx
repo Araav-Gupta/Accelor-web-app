@@ -200,6 +200,11 @@ function EmployeeDetails({ employee, onClose, isAdmin, onLockToggle, onEmployeeU
                   </div>
                 </>
               )}
+              {employee.status === 'Working' && employee.employeeType === 'OJT' && (
+                <div>
+                  <strong>Service Agreement:</strong> {employee.serviceAgreement ? `${employee.serviceAgreement} months` : 'N/A'}
+                </div>
+              )}
               <div>
                 <strong>Referred By:</strong> {employee.referredBy || 'N/A'}
               </div>
@@ -253,7 +258,7 @@ function EmployeeDetails({ employee, onClose, isAdmin, onLockToggle, onEmployeeU
                 >
                   {employee.positionLocked ? 'Unlock Position' : 'Lock Position'}
                 </Button>
-              </div>
+                </div>
             )}
           </div>
         );
@@ -347,6 +352,15 @@ function EmployeeDetails({ employee, onClose, isAdmin, onLockToggle, onEmployeeU
                 </div>
               </>
             )}
+            <div>
+              <strong>CTC (Annual):</strong> {employee.ctc ? `₹${employee.ctc.toLocaleString()}` : 'N/A'}
+            </div>
+            <div>
+              <strong>Basic (Monthly):</strong> {employee.basic ? `₹${employee.basic.toLocaleString()}` : 'N/A'}
+            </div>
+            <div>
+              <strong>In Hand (Monthly):</strong> {employee.inHand ? `₹${employee.inHand.toLocaleString()}` : 'N/A'}
+            </div>
             {isAdmin && (
               <div className="col-span-2">
                 <Button

@@ -91,6 +91,7 @@ const checkAbsences = async () => {
         await Notification.create({
           userId: admin.employeeId,
           message: `Employee ${employee.employeeId} has been absent without prior leave for 3 consecutive days. Review in attendance list to send warning.`,
+          alertType: 'warning',
         });
         if (global._io) {
           global._io.to(admin.employeeId).emit('notification', {
@@ -101,6 +102,7 @@ const checkAbsences = async () => {
         await Notification.create({
           userId: admin.employeeId,
           message: `Employee ${employee.employeeId} has been absent without prior leave for 5 consecutive days. Review in attendance list to send termination notice.`,
+          alertType: 'termination',
         });
         if (global._io) {
           global._io.to(admin.employeeId).emit('notification', {

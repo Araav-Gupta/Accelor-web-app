@@ -63,6 +63,10 @@ function EmployeeForm() {
     bankBranch: '',
     accountNumber: '',
     ifscCode: '',
+    serviceAgreement: '',
+    ctc: '',
+    basic: '',
+    inHand: '',
   });
   const [files, setFiles] = useState({
     profilePicture: null,
@@ -152,9 +156,12 @@ function EmployeeForm() {
     setErrors({ ...errors, [name]: '' });
 
     if (name === 'status' && value !== 'Working') {
-      setForm(prev => ({ ...prev, employeeType: '', probationPeriod: '', confirmationDate: '' }));
+      setForm(prev => ({ ...prev, employeeType: '', probationPeriod: '', confirmationDate: '', serviceAgreement: '' }));
     } else if (name === 'employeeType' && value !== 'Probation') {
       setForm(prev => ({ ...prev, probationPeriod: '', confirmationDate: '' }));
+      if (value !== 'OJT') {
+        setForm(prev => ({ ...prev, serviceAgreement: '' }));
+      }
     }
   };
 
@@ -191,6 +198,9 @@ function EmployeeForm() {
       if (form.status === 'Working' && form.employeeType === 'Probation' && (!form.probationPeriod || !form.confirmationDate)) {
         newErrors.probationPeriod = 'Probation Period is required';
         newErrors.confirmationDate = 'Confirmation Date is required';
+      }
+      if (form.status === 'Working' && form.employeeType === 'OJT' && (!form.serviceAgreement || form.serviceAgreement.trim() === '')) {
+        newErrors.serviceAgreement = 'Service Agreement is required';
       }
       if (form.email && !/\S+@\S+\.\S+/.test(form.email)) {
         newErrors.email = 'Valid email is required';
@@ -247,6 +257,14 @@ function EmployeeForm() {
           }
         });
       }
+      const salaryFields = ['ctc', 'basic', 'inHand'];
+      salaryFields.forEach(field => {
+        if (!form[field] || form[field].trim() === '') {
+          newErrors[field] = `${field.replace(/([A-Z])/g, ' $1').trim()} is required`;
+        } else if (isNaN(form[field]) || Number(form[field]) < 0) {
+          newErrors[field] = `${field.replace(/([A-Z])/g, ' $1').trim()} must be a valid number`;
+        }
+      });
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -484,6 +502,8 @@ function EmployeeForm() {
                     <SelectItem value="Confirmed">Confirmed</SelectItem>
                     <SelectItem value="Probation">Probation</SelectItem>
                     <SelectItem value="Contractual">Contractual</SelectItem>
+                    <SelectItem value="Apprentice">Apprentice</SelectItem>
+                    <SelectItem value="OJT">OJT</SelectItem>
                   </SelectContent>
                 </Select>
                 {errors.employeeType && <p className="mt-1 text-sm text-red-500">{errors.employeeType}</p>}
@@ -520,7 +540,23 @@ function EmployeeForm() {
                 </motion.div>
               </>
             )}
-            <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4, delay: 1.25 }}>
+            {form.status === 'Working' && form.employeeType === 'OJT' && (
+              <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4, delay: 1.25 }}>
+                <Label htmlFor="serviceAgreement">Service Agreement (Months)</Label>
+                <Input
+                  id="serviceAgreement"
+                  name="serviceAgreement"
+                  type="number"
+                  value={form.serviceAgreement}
+                  onChange={handleChange}
+                  className={errors.serviceAgreement ? 'border-red-500' : ''}
+                  placeholder="Enter service agreement period"
+                  required
+                />
+                {errors.serviceAgreement && <p className="mt-1 text-sm text-red-500">{errors.serviceAgreement}</p>}
+              </motion.div>
+            )}
+            <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4, delay: 1.30 }}>
               <Label htmlFor="referredBy">Referred By</Label>
               <Input
                 id="referredBy"
@@ -574,7 +610,7 @@ function EmployeeForm() {
                   placeholder={`Enter ${field.label.toLowerCase()}`}
                   required
                 />
-                {errors[field.id] && <p className="mt-1 text-sm text-red-500">{errors[field.id]}</p>}
+                {errors[field.id] && <p className="mt-1 text-sm text-red-500">{errors.field.id}</p>}
               </motion.div>
             ))}
             <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4, delay: 0.10 }}>
@@ -620,7 +656,7 @@ function EmployeeForm() {
                   pattern={field.pattern}
                   required={field.id === 'panNumber'}
                 />
-                {errors[field.id] && <p className="mt-1 text-sm text-red-500">{errors[field.id]}</p>}
+                {errors[field.id] && <p className="mt-1 text-sm text-red-500">{errors.field.id}</p>}
               </motion.div>
             ))}
           </div>
@@ -657,7 +693,7 @@ function EmployeeForm() {
                   className={errors[field.id] ? 'border-red-500' : ''}
                   required={field.id !== 'postgraduationDocs' && field.id !== 'experienceCertificate' && field.id !== 'salarySlips'}
                 />
-                {errors[field.id] && <p className="mt-1 text-sm text-red-500">{errors[field.id]}</p>}
+                {errors[field.id] && <p className="mt-1 text-sm text-red-500">{errors.field.id}</p>}
               </motion.div>
             ))}
             <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4, delay: 0.50 }}>
@@ -715,11 +751,37 @@ function EmployeeForm() {
                       placeholder={`Enter ${field.label.toLowerCase()}`}
                       required
                     />
-                    {errors[field.id] && <p className="mt-1 text-sm text-red-500">{errors[field.id]}</p>}
+                    {errors[field.id] && <p className="mt-1 text-sm text-red-500">{errors.field.id}</p>}
                   </motion.div>
                 ))}
               </>
             )}
+            {[
+              { id: 'ctc', label: 'CTC', type: 'number' },
+              { id: 'basic', label: 'Basic', type: 'number' },
+              { id: 'inHand', label: 'In Hand', type: 'number' },
+            ].map((field, index) => (
+              <motion.div
+                key={field.id}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.4, delay: (form.paymentType === 'Bank Transfer' ? 5 : 2) * 0.05 + index * 0.05 }}
+              >
+                <Label htmlFor={field.id}>{field.label}</Label>
+                <Input
+                  id={field.id}
+                  name={field.id}
+                  type={field.type}
+                  value={form[field.id]}
+                  onChange={handleChange}
+                  className={errors[field.id] ? 'border-red-500' : ''}
+                  placeholder={`Enter ${field.label.toLowerCase()}`}
+                  required
+                  min="0"
+                />
+                {errors[field.id] && <p className="mt-1 text-sm text-red-500">{errors[field.id]}</p>}
+              </motion.div>
+            ))}
           </div>
         );
       default:

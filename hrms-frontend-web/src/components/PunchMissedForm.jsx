@@ -21,6 +21,7 @@ function PunchMissedForm() {
     punchMissedDate: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }), // YYYY-MM-DD in IST
     when: 'Time IN',
     yourInput: '',
+    reason: '',
   });
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
@@ -70,6 +71,10 @@ function PunchMissedForm() {
       setError('Your Input must be in valid time format (e.g., 09:30 AM).');
       return;
     }
+    if (!formData.reason.trim()) {
+      setError('Reason is required.');
+      return;
+    }
     setLoading(true);
     try {
       await api.post('/punch-missed', formData);
@@ -78,6 +83,7 @@ function PunchMissedForm() {
         punchMissedDate: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }),
         when: 'Time IN',
         yourInput: '',
+        reason: '',
       });
       setCanSubmit(false);
     } catch (err) {
@@ -106,7 +112,7 @@ function PunchMissedForm() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
-            className="grid grid-cols-1 sm:grid-cols-2 gap-4"
+            className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4"
           >
             <div className="flex-1 min-w-[200px]">
               <Label htmlFor="punchMissedDate">Punch Missed Date</Label>
@@ -147,6 +153,18 @@ function PunchMissedForm() {
                 value={formData.yourInput}
                 onChange={(e) => handleChange('yourInput', e.target.value)}
                 placeholder="Enter time (e.g., 09:30 AM)"
+                className="mt-1 border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                disabled={loading || !canSubmit}
+              />
+            </div>
+            <div className="flex-1 min-w-[200px]">
+              <Label htmlFor="reason">Reason</Label>
+              <Input
+                id="reason"
+                name="reason"
+                value={formData.reason}
+                onChange={(e) => handleChange('reason', e.target.value)}
+                placeholder="Enter reason for missing punch"
                 className="mt-1 border-gray-300 focus:ring-blue-500 focus:border-blue-500"
                 disabled={loading || !canSubmit}
               />
