@@ -11,6 +11,8 @@ function Dashboard() {
   const [data, setData] = useState({
     confirmedEmployees: 0,
     probationEmployees: 0,
+    ojtEmployees: 0,
+    apprenticeEmployees: 0,
     contractualEmployees: 0,
     internEmployees: 0,
     presentToday: 0,
@@ -105,7 +107,7 @@ function Dashboard() {
         setError('Failed to fetch dashboard data. Please try again.');
       } finally {
         setLoading(false);
-        }
+      }
     };
 
     fetchData();
@@ -167,6 +169,22 @@ function Dashboard() {
           </div>
           {/* Second Row: Present and Pending Leaves Cards */}
           <div className="flex justify-center gap-20 w-full mt-6">
+            <Card className="w-48 h-48 flex flex-col items-center justify-center bg-gradient-to-br from-teal-50 to-teal-100">
+              <CardHeader className="p-2">
+                <CardTitle className="text-lg font-semibold text-teal-800 text-center">OJT</CardTitle>
+              </CardHeader>
+              <CardContent className="p-2">
+                <p className="text-3xl font-bold text-teal-600 text-center">{data.ojtEmployees}</p>
+              </CardContent>
+            </Card>
+            <Card className="w-48 h-48 flex flex-col items-center justify-center bg-gradient-to-br from-orange-50 to-orange-100">
+              <CardHeader className="p-2">
+                <CardTitle className="text-lg font-semibold text-orange-800 text-center">Apprentice</CardTitle>
+              </CardHeader>
+              <CardContent className="p-2">
+                <p className="text-3xl font-bold text-orange-600 text-center">{data.apprenticeEmployees}</p>
+              </CardContent>
+            </Card>
             <Card className="w-48 h-48 flex flex-col items-center justify-center bg-gradient-to-br from-green-50 to-green-100">
               <CardHeader className="p-2">
                 <CardTitle className="text-lg font-semibold text-green-800 text-center">Present Today</CardTitle>

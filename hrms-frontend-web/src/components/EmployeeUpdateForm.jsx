@@ -76,6 +76,10 @@ function EmployeeUpdateForm({ employee, onUpdate }) {
     bankBranch: employee.bankDetails?.bankBranch || '',
     accountNumber: employee.bankDetails?.accountNumber || '',
     ifscCode: employee.bankDetails?.ifscCode || '',
+    serviceAgreement: employee.status === 'Working' && employee.employeeType === 'OJT' ? employee.serviceAgreement || '' : '',
+    ctc: employee.ctc || '',
+    basic: employee.basic || '',
+    inHand: employee.inHand || '',
   });
   const [files, setFiles] = useState({
     profilePicture: null,
@@ -170,10 +174,16 @@ function EmployeeUpdateForm({ employee, onUpdate }) {
         updatedForm.employeeType = '';
         updatedForm.probationPeriod = '';
         updatedForm.confirmationDate = '';
+        updatedForm.serviceAgreement = '';
       }
-      if (name === 'employeeType' && value !== 'Probation') {
-        updatedForm.probationPeriod = '';
-        updatedForm.confirmationDate = '';
+      if (name === 'employeeType') {
+        if (value !== 'Probation') {
+          updatedForm.probationPeriod = '';
+          updatedForm.confirmationDate = '';
+        }
+        if (value !== 'OJT') {
+          updatedForm.serviceAgreement = '';
+        }
       }
       if (name === 'paymentType' && value !== 'Bank Transfer') {
         updatedForm.bankName = '';
@@ -249,6 +259,9 @@ function EmployeeUpdateForm({ employee, onUpdate }) {
         newErrors.probationPeriod = 'Probation Period is required';
         newErrors.confirmationDate = 'Confirmation Date is required';
       }
+      if (form.status === 'Working' && form.employeeType === 'OJT' && (!form.serviceAgreement || form.serviceAgreement.toString().trim() === '')) {
+        newErrors.serviceAgreement = 'Service Agreement is required';
+      }
       if (form.email && !/\S+@\S+\.\S+/.test(form.email)) {
         newErrors.email = 'Valid email is required';
       }
@@ -263,6 +276,9 @@ function EmployeeUpdateForm({ employee, onUpdate }) {
       }
       if (form.bloodGroup && !['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].includes(form.bloodGroup)) {
         newErrors.bloodGroup = 'Invalid blood group';
+      }
+      if (form.serviceAgreement && (isNaN(form.serviceAgreement) || Number(form.serviceAgreement) < 0)) {
+        newErrors.serviceAgreement = 'Service Agreement must be a non-negative number';
       }
     } else if (currentStep === 2) {
       const requiredFields = ['designation', 'location', 'department'];
@@ -284,9 +300,8 @@ function EmployeeUpdateForm({ employee, onUpdate }) {
         newErrors.uanNumber = 'UAN Number must be 12 digits';
       }
       if (form.esiNumber && !/^\d{12}$/.test(form.esiNumber)) {
-        newErrors.esiNumberForm = 'ESI Number must be 12 digits';
+        newErrors.esiNumber = 'ESI Number must be 12 digits';
       }
-
     } else if (currentStep === 4) {
       const fileFields = [
         'profilePicture', 'tenthTwelfthDocs', 'graduationDocs', 'postgraduationDocs',
@@ -320,10 +335,19 @@ function EmployeeUpdateForm({ employee, onUpdate }) {
           }
         });
       }
+      const salaryFields = ['ctc', 'basic', 'inHand'];
+      salaryFields.forEach(field => {
+        if (!form[field] || form[field].toString().trim() === '') {
+          newErrors[field] = `${field.replace(/([A-Z])/g, ' $1').trim()} is required`;
+        } else if (isNaN(form[field]) || Number(form[field]) < 0) {
+          newErrors[field] = `${field.replace(/([A-Z])/g, ' $1').trim()} must be a non-negative number`;
+        }
+      });
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
+
   const handleNext = () => {
     if (!validateStep(step)) {
       console.error('Validation failed for step:', step, errors);
@@ -614,7 +638,7 @@ function EmployeeUpdateForm({ employee, onUpdate }) {
                     <SelectItem value="Married">Married</SelectItem>
                   </SelectContent>
                 </Select>
-                {errors.maritalStatus && <p className="mt-1 text-sm text-red-500">{errors.martialStatus}</p>}
+                {errors.maritalStatus && <p className="mt-1 text-sm text-red-500">{errors.maritalStatus}</p>}
               </div>
               {form.maritalStatus === 'Married' && (
                 <div className="flex flex-col">
@@ -712,6 +736,8 @@ function EmployeeUpdateForm({ employee, onUpdate }) {
                         <SelectItem value="Confirmed">Confirmed</SelectItem>
                         <SelectItem value="Probation">Probation</SelectItem>
                         <SelectItem value="Contractual">Contractual</SelectItem>
+                        <SelectItem value="Apprentice">Apprentice</SelectItem>
+                        <SelectItem value="OJT">OJT</SelectItem>
                       </SelectContent>
                     </Select>
                     {errors.employeeType && <p className="mt-1 text-sm text-red-500">{errors.employeeType}</p>}
@@ -740,6 +766,20 @@ function EmployeeUpdateForm({ employee, onUpdate }) {
                         {errors.confirmationDate && <p className="mt-1 text-sm text-red-500">{errors.confirmationDate}</p>}
                       </div>
                     </>
+                  )}
+                  {form.employeeType === 'OJT' && (
+                    <div className="flex flex-col">
+                      <strong className="mb-1">Service Agreement (months):</strong>
+                      <Input
+                        name="serviceAgreement"
+                        type="number"
+                        value={form.serviceAgreement}
+                        onChange={handleChange}
+                        className={errors.serviceAgreement ? 'border-red-500' : ''}
+                        min="0"
+                      />
+                      {errors.serviceAgreement && <p className="mt-1 text-sm text-red-500">{errors.serviceAgreement}</p>}
+                    </div>
                   )}
                 </>
               )}
@@ -957,6 +997,42 @@ function EmployeeUpdateForm({ employee, onUpdate }) {
                   </div>
                 </>
               )}
+              <div className="flex flex-col">
+                <strong className="mb-1">CTC (Annual):</strong>
+                <Input
+                  name="ctc"
+                  type="number"
+                  value={form.ctc}
+                  onChange={handleChange}
+                  className={errors.ctc ? 'border-red-500' : ''}
+                  min="0"
+                />
+                {errors.ctc && <p className="mt-1 text-sm text-red-500">{errors.ctc}</p>}
+              </div>
+              <div className="flex flex-col">
+                <strong className="mb-1">Basic (Monthly):</strong>
+                <Input
+                  name="basic"
+                  type="number"
+                  value={form.basic}
+                  onChange={handleChange}
+                  className={errors.basic ? 'border-red-500' : ''}
+                  min="0"
+                />
+                {errors.basic && <p className="mt-1 text-sm text-red-500">{errors.basic}</p>}
+              </div>
+              <div className="flex flex-col">
+                <strong className="mb-1">In Hand (Monthly):</strong>
+                <Input
+                  name="inHand"
+                  type="number"
+                  value={form.inHand}
+                  onChange={handleChange}
+                  className={errors.inHand ? 'border-red-500' : ''}
+                  min="0"
+                />
+                {errors.inHand && <p className="mt-1 text-sm text-red-500">{errors.inHand}</p>}
+              </div>
             </div>
           )}
         </div>

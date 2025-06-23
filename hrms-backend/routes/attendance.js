@@ -205,7 +205,19 @@ router.get('/absence-alerts', auth, role(['Admin']), async (req, res) => {
         lastDate = currentDate;
       }
 
-      if (consecutiveDays === 3 || consecutiveDays === 5) {
+      // Check if a warning notification was already sent for 3-day absence
+      const warningSent = consecutiveDays >= 3 ? await Notification.findOne({
+        userId: employee.employeeId,
+        alertType: 'warning',
+        createdAt: { $gte: fiveDaysAgo },
+      }) : null;
+
+      if (consecutiveDays === 3 && !warningSent) {
+        alerts.push({
+          employeeId: employee.employeeId,
+          days: consecutiveDays,
+        });
+      } else if (consecutiveDays === 5) {
         alerts.push({
           employeeId: employee.employeeId,
           days: consecutiveDays,
@@ -236,6 +248,7 @@ router.post('/send-absence-notification', auth, role(['Admin']), async (req, res
       await Notification.create({
         userId: employee.employeeId,
         message: `Warning: You have been absent without prior leave approval for 3 consecutive days. Please contact HR immediately.`,
+        alertType: 'warning',
       });
       if (global._io) {
         global._io.to(employee.employeeId).emit('notification', {
@@ -250,14 +263,17 @@ router.post('/send-absence-notification', auth, role(['Admin']), async (req, res
         {
           userId: employee.employeeId,
           message: `Termination Notice: You have been absent without prior leave approval for 5 consecutive days. Your employment may be terminated. Please contact HR immediately.`,
+          alertType: 'termination',
         },
         ...(hod ? [{
           userId: hod.employeeId,
           message: `Termination Notice: Employee ${employee.name} (${employee.employeeId}) has been absent without prior leave approval for 5 consecutive days.`,
+          alertType: 'termination',
         }] : []),
         ...(ceo ? [{
           userId: ceo.employeeId,
           message: `Termination Notice: Employee ${employee.name} (${employee.employeeId}) has been absent without prior leave approval for 5 consecutive days.`,
+          alertType: 'termination',
         }] : []),
       ]);
 

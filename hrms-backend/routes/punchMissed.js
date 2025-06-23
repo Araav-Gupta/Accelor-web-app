@@ -33,7 +33,7 @@ router.get('/check-limit', auth, role(['Employee', 'HOD', 'Admin']), async (req,
 
 router.post('/', auth, role(['Employee', 'HOD', 'Admin']), async (req, res) => {
   try {
-    const { punchMissedDate, when, yourInput } = req.body;
+    const { punchMissedDate, when, yourInput, reason } = req.body;
     const employee = await Employee.findOne({ employeeId: req.user.employeeId });
     if (!employee) {
       return res.status(404).json({ message: 'Employee not found' });
@@ -75,6 +75,7 @@ router.post('/', auth, role(['Employee', 'HOD', 'Admin']), async (req, res) => {
       punchMissedDate,
       when,
       yourInput,
+      reason,
       adminInput,
       status,
     });
