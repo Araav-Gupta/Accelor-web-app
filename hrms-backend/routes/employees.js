@@ -196,17 +196,19 @@ router.get('/department', auth, role(['HOD', 'Employee']), async (req, res) => {
           {
             'fullDay.from': { $lte: parsedEnd },
             'fullDay.to': { $gte: parsedStart },
-            $or: [
+            $and: [
               { 'status.hod': { $in: ['Pending', 'Approved'] } },
               { 'status.ceo': { $in: ['Pending', 'Approved'] } },
-            ],
+              { 'status.admin': { $in: ['Pending', 'Acknowledged'] } }
+            ]
           },
           {
             'halfDay.date': { $gte: parsedStart, $lte: parsedEnd },
-            $or: [
+            $and: [
               { 'status.hod': { $in: ['Pending', 'Approved'] } },
               { 'status.ceo': { $in: ['Pending', 'Approved'] } },
-            ],
+              { 'status.admin': { $in: ['Pending', 'Acknowledged'] } }
+            ]
           },
         ],
       }).select('chargeGivenTo');
