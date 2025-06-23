@@ -52,7 +52,8 @@ export const AuthProvider = ({ children }) => {
       await fetchUserDetails();
       return user; // Return user data so caller can redirect correctly
     } catch (err) {
-      console.error('Login error:', err);
+      const errorMessage = err.response?.data?.message || err.message || 'Login failed';
+      console.error('Login error:', errorMessage);
       throw new Error('Login failed, please check your credentials and try again.');
     }
   };

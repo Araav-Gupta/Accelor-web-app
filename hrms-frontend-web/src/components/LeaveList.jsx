@@ -599,7 +599,7 @@ function LeaveList() {
                       <strong>Reason:</strong> {selectedLeave.reason}
                     </p>
                     <p>
-                      <strong>Charge Given To:</strong> {selectedLeave.chargeGivenTo}
+                      <strong>Charge Given To:</strong> {selectedLeave.chargeGivenTo?.name || "N/A"}
                     </p>
                     <p>
                       <strong>Emergency Contact:</strong>{" "}
