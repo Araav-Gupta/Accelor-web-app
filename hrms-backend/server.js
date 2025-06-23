@@ -17,24 +17,24 @@ const app = express();
 const server = http.createServer(app);
 
 const allowedOrigins = [
-  'http://192.168.1.20:5001',
+  'http://192.168.1.21:5001',
   'http://localhost:5174',
   'http://localhost:3000',
   'http://192.168.59.225:5001',
 ];
 
-app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-    return callback(new Error('Not allowed by CORS'));
-  },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,
-}));
-
+// app.use(cors({
+//   origin: (origin, callback) => {
+//     if (!origin || allowedOrigins.includes(origin)) {
+//       return callback(null, true);
+//     }
+//     return callback(new Error('Not allowed by CORS'));
+//   },
+//   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+//   allowedHeaders: ['Content-Type', 'Authorization'],
+//   credentials: true,
+// }));
+app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -121,7 +121,7 @@ mongoose.connect(process.env.MONGO_URI)
           console.log('checkAbsences at midnight completed.');
         }, { timezone: 'Asia/Kolkata' });
 
-        const PORT = process.env.PORT || 5000;
+        const PORT = process.env.PORT || 5001;
         server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
       }
     }, 100); // Check every 100ms
