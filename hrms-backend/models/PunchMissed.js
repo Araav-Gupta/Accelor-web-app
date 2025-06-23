@@ -7,6 +7,7 @@ const punchMissedSchema = new mongoose.Schema({
   punchMissedDate: { type: Date, required: true },
   when: { type: String, enum: ['Time IN', 'Time OUT'], required: true },
   yourInput: { type: String, required: true },
+  reason: { type: String, required: true },
   adminInput: { type: String },
   status: {
     hod: { type: String, enum: ['Pending', 'Approved'], default: 'Pending' },

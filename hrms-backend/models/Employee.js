@@ -37,7 +37,7 @@ const employeeSchema = new mongoose.Schema({
   },
   employeeType: { 
     type: String, 
-    enum: ['Intern', 'Confirmed', 'Contractual', 'Probation'],
+    enum: ['Intern', 'Confirmed', 'Contractual', 'Probation', 'Apprentice', 'OJT'],
     required: function() { return this.status === 'Working'; }
   },
   probationPeriod: { 
@@ -47,6 +47,10 @@ const employeeSchema = new mongoose.Schema({
   confirmationDate: { 
     type: Date,
     required: function() { return this.status === 'Working' && this.employeeType === 'Probation'; } 
+  },
+  serviceAgreement: {
+    type: Number,
+    required: function() { return this.status === 'Working' && this.employeeType === 'OJT'; }
   },
   referredBy: String,
   loginType: { type: String, enum: ['Employee', 'HOD', 'Admin', 'CEO'] },
@@ -78,6 +82,9 @@ const employeeSchema = new mongoose.Schema({
       required: function() { return this.paymentType === 'Bank Transfer'; } 
     },
   },
+  ctc: { type: Number, required: true },
+  basic: { type: Number, required: true },
+  inHand: { type: Number, required: true },
   locked: { type: Boolean, default: true },
   basicInfoLocked: { type: Boolean, default: true },
   positionLocked: { type: Boolean, default: true },
@@ -200,7 +207,7 @@ employeeSchema.pre('save', async function(next) {
       const leavesForYear = joinMonth === 11 ? 0 : 12 - (joinMonth + 1); // Exclude joining month
       this.paidLeaves = joinDay > 15 ? 0 : 1; // No leave for joining month if after 15th, else 1
       this.lastLeaveReset = new Date(joinYear, joinDay > 15 ? joinMonth + 1 : joinMonth, 1);
-    } else if (['Intern', 'Contractual', 'Probation'].includes(this.employeeType)) {
+    } else if (['Intern', 'Contractual', 'Probation', 'Apprentice', 'OJT'].includes(this.employeeType)) {
       // Non-Confirmed employees get 1 leave per month, starting next month if joined after 15th
       this.paidLeaves = joinDay > 15 ? 0 : 1; // No leave for joining month if after 15th
       this.lastLeaveReset = new Date(joinYear, joinDay > 15 ? joinMonth + 1 : joinMonth, 1);

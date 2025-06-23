@@ -33,6 +33,7 @@ function Navbar() {
           },
         ],
       },
+      { text: "Payroll Download", path: "/admin/payroll-download" },
     ],
     CEO: [
       { text: "Dashboard", path: "/ceo/dashboard" },

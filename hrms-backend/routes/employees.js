@@ -5,7 +5,7 @@ import XLSX from 'xlsx';
 import multer from 'multer';
 import Employee from '../models/Employee.js';
 import Department from '../models/Department.js';
-import Leave from '../models/Leave.js'; // Import Leave model
+import Leave from '../models/Leave.js';
 import auth from '../middleware/auth.js';
 import role from '../middleware/role.js';
 import Audit from '../models/Audit.js';
@@ -108,7 +108,7 @@ const checkForFiles = (req, res, next) => {
 
 const excelUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 } // 5MB
+  limits: { fileSize: 5 * 1024 * 1024 }
 });
 
 // Get document metadata for an employee
@@ -168,7 +168,9 @@ router.get('/department', auth, role(['HOD', 'Employee']), async (req, res) => {
       _id: { $ne: id }, // Exclude logged-in user
     };
     if (loginType === 'Employee') {
-      query.loginType = { $ne: 'HOD' }; // Exclude HODs for regular employees
+      query.loginType = { $nin: ['HOD', 'CEO', 'Admin'] }; // Exclude HOD, CEO, Admin for regular employees
+    } else if (loginType === 'HOD') {
+      query.loginType = { $nin: ['CEO', 'Admin'] }; // Exclude CEO, Admin for HODs
     }
 
     let excludedEmployeeIds = [];
@@ -257,8 +259,8 @@ router.post('/', auth, role(['Admin']), ensureGfs, ensureDbConnection, checkForF
       mobileNumber, permanentAddress, currentAddress, aadharNumber, bloodGroup, gender, maritalStatus,
       spouseName, emergencyContactName, emergencyContactNumber, dateOfJoining, reportingManager,
       status, dateOfResigning, employeeType, probationPeriod, confirmationDate, referredBy, loginType,
-      designation, location, department, panNumber, pfNumber,
-      uanNumber, esiNumber, paymentType, bankName, bankBranch, accountNumber, ifscCode
+      designation, location, department, panNumber, pfNumber, uanNumber, esiNumber, paymentType,
+      bankName, bankBranch, accountNumber, ifscCode, serviceAgreement, ctc, basic, inHand
     } = req.body;
 
     // Validate required fields
@@ -267,10 +269,10 @@ router.post('/', auth, role(['Admin']), ensureGfs, ensureDbConnection, checkForF
       'motherName', 'mobileNumber', 'permanentAddress', 'currentAddress', 'aadharNumber',
       'bloodGroup', 'gender', 'maritalStatus', 'emergencyContactName', 'emergencyContactNumber',
       'dateOfJoining', 'reportingManager', 'status', 'loginType', 'designation',
-      'location', 'department', 'panNumber', 'paymentType'
+      'location', 'department', 'panNumber', 'paymentType', 'ctc', 'basic', 'inHand'
     ];
     for (const field of requiredFields) {
-      if (!req.body[field] || req.body[field].trim() === '') {
+      if (!req.body[field] || req.body[field].tostring().trim() === '') {
         console.log(`Validation failed: ${field} is missing`);
         return res.status(400).json({ message: `${field} is required` });
       }
@@ -290,6 +292,10 @@ router.post('/', auth, role(['Admin']), ensureGfs, ensureDbConnection, checkForF
 
     if (status === 'Working' && employeeType === 'Probation' && (!probationPeriod || !confirmationDate)) {
       return res.status(400).json({ message: 'Probation period and confirmation date are required for Probation employee type' });
+    }
+    
+    if (status === 'Working' && employeeType === 'OJT' && (!serviceAgreement || serviceAgreement.toString().trim() === '')) {
+      return res.status(400).json({ message: 'Service Agreement is required for OJT employee type' });
     }
 
     if (paymentType === 'Bank Transfer' && (!bankName || !bankBranch || !accountNumber || !ifscCode)) {
@@ -320,6 +326,18 @@ router.post('/', auth, role(['Admin']), ensureGfs, ensureDbConnection, checkForF
 
     if (!['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].includes(bloodGroup)) {
       return res.status(400).json({ message: 'Invalid blood group' });
+    }
+    if (!['Intern', 'Confirmed', 'Contractual', 'Probation', 'Apprentice', 'OJT'].includes(employeeType)) {
+      return res.status(400).json({ message: 'Invalid employee type' });
+    }
+    if (isNaN(ctc) || Number(ctc) < 0) {
+      return res.status(400).json({ message: 'CTC must be a valid non-negative number' });
+    }
+    if (isNaN(basic) || Number(basic) < 0) {
+      return res.status(400).json({ message: 'Basic must be a valid non-negative number' });
+    }
+    if (isNaN(inHand) || Number(inHand) < 0) {
+      return res.status(400).json({ message: 'In Hand must be a valid non-negative number' });
     }
 
     const departmentExists = await Department.findById(department);
@@ -390,6 +408,10 @@ router.post('/', auth, role(['Admin']), ensureGfs, ensureDbConnection, checkForF
         accountNumber,
         ifscCode,
       } : {},
+      serviceAgreement: status === 'Working' && employeeType === 'OJT' ? Number(serviceAgreement) : null,
+      ctc: Number(ctc),
+      basic: Number(basic),
+      inHand: Number(inHand),
       locked: true,
       basicInfoLocked: true,
       positionLocked: true,
@@ -453,7 +475,7 @@ router.put('/:id', auth, ensureGfs, ensureDbConnection, checkForFiles, async (re
       'motherName', 'mobileNumber', 'permanentAddress', 'currentAddress', 'aadharNumber',
       'bloodGroup', 'gender', 'maritalStatus', 'spouseName', 'emergencyContactName', 'emergencyContactNumber',
       'dateOfJoining', 'reportingManager', 'status', 'dateOfResigning', 'employeeType', 'probationPeriod', 'confirmationDate',
-      'referredBy', 'loginType',
+      'referredBy', 'loginType', 'serviceAgreement'
     ];
     const positionFields = ['designation', 'location', 'department'];
     const statutoryFields = ['panNumber', 'pfNumber', 'uanNumber', 'esiNumber'];
@@ -462,7 +484,7 @@ router.put('/:id', auth, ensureGfs, ensureDbConnection, checkForFiles, async (re
       'salarySlips', 'panCard', 'aadharCard', 'bankPassbook', 'medicalCertificate',
       'backgroundVerification', 'profilePicture',
     ];
-    const paymentFields = ['paymentType', 'bankName', 'bankBranch', 'accountNumber', 'ifscCode'];
+    const paymentFields = ['paymentType', 'bankName', 'bankBranch', 'accountNumber', 'ifscCode', 'ctc', 'basic', 'inHand'];
 
     // Check lock status for each section
     if (!isAdmin) {
@@ -519,6 +541,9 @@ router.put('/:id', auth, ensureGfs, ensureDbConnection, checkForFiles, async (re
     if (updates.status === 'Working' && updates.employeeType === 'Probation' && (!updates.probationPeriod || !updates.confirmationDate)) {
       return res.status(400).json({ message: 'Probation period and confirmation date are required for Probation' });
     }
+    if (updates.status === 'Working' && updates.employeeType === 'OJT' && (!updates.serviceAgreement || updates.serviceAgreement.toString().trim() === '')) {
+      return res.status(400).json({ message: 'Service Agreement is required for OJT employee type' });
+    }
     if (updates.panNumber && !/^[A-Z0-9]{10}$/.test(updates.panNumber)) {
       return res.status(400).json({ message: 'PAN Number must be 10 alphanumeric characters' });
     }
@@ -537,6 +562,15 @@ router.put('/:id', auth, ensureGfs, ensureDbConnection, checkForFiles, async (re
     if (updates.confirmationDate) updates.confirmationDate = new Date(updates.confirmationDate);
     if (updates.paymentType === 'Bank Transfer' && (!updates.bankName || !updates.bankBranch || !updates.accountNumber || !updates.ifscCode)) {
       return res.status(400).json({ message: 'Bank details are required for bank transfer payment type' });
+    }
+    if (updates.ctc && (isNaN(updates.ctc) || Number(updates.ctc) < 0)) {
+      return res.status(400).json({ message: 'CTC must be a valid non-negative number' });
+    }
+    if (updates.basic && (isNaN(updates.basic) || Number(updates.basic) < 0)) {
+      return res.status(400).json({ message: 'Basic must be a valid non-negative number' });
+    }
+    if (updates.inHand && (isNaN(updates.inHand) || Number(updates.inHand) < 0)) {
+      return res.status(400).json({ message: 'In Hand must be a valid non-negative number' });
     }
 
     // Handle file uploads
@@ -596,6 +630,14 @@ router.put('/:id', auth, ensureGfs, ensureDbConnection, checkForFiles, async (re
         ifscCode: updates.ifscCode,
       } : {};
     }
+    if (updates.status === 'Working' && updates.employeeType === 'OJT') {
+      employee.serviceAgreement = Number(updates.serviceAgreement);
+    } else {
+      employee.serviceAgreement = null;
+    }
+    if (updates.ctc) employee.ctc = Number(updates.ctc);
+    if (updates.basic) employee.basic = Number(updates.basic);
+    if (updates.inHand) employee.inHand = Number(updates.inHand);
 
     const updatedEmployee = await employee.save();
     const populatedEmployee = await Employee.findById(employee._id).populate('department reportingManager');
@@ -763,11 +805,7 @@ router.patch('/:id/lock-section', auth, role(['Admin']), async (req, res) => {
   }
 });
 
-router.post('/upload-excel',
-  auth,
-  role(['Admin']),
-  excelUpload.single('excel'),
-  async (req, res) => {
+router.post('/upload-excel', auth, role(['Admin']), excelUpload.single('excel'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ message: 'No file uploaded.' });
@@ -812,6 +850,18 @@ router.post('/upload-excel',
           }
           if (row.status === 'Working' && row.employeeType === 'Probation' && (!row.probationPeriod || !row.confirmationDate)) {
             throw new Error('Probation period and confirmation date are required for Probation employee type');
+          }
+          if (row.status === 'Working' && row.employeeType === 'OJT' && (!row.serviceAgreement || row.serviceAgreement.toString().trim() === '')) {
+            throw new Error('Service Agreement is required for OJT employee type');
+          }
+          if (isNaN(row.ctc) || Number(row.ctc) < 0) {
+            throw new Error('CTC must be a valid non-negative number');
+          }
+          if (isNaN(row.basic) || Number(row.basic) < 0) {
+            throw new Error('Basic must be a valid non-negative number');
+          }
+          if (isNaN(row.inHand) || Number(row.inHand) < 0) {
+            throw new Error('In Hand must be a valid non-negative number');
           }
 
             // Department population if department is provided
@@ -871,6 +921,10 @@ router.post('/upload-excel',
               accountNumber: row.accountNumber || '',
               ifscCode: row.ifscCode || '',
             } : null,
+            serviceAgreement: row.status === 'Working' && row.employeeType === 'OJT' ? Number(row.serviceAgreement) : null,
+            ctc: Number(row.ctc),
+            basic: Number(row.basic),
+            inHand: Number(row.inHand),
               // Lock all sections except document upload (which stays locked)
             locked: true,
             basicInfoLocked: true,
