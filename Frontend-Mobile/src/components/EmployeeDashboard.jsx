@@ -78,10 +78,8 @@ function EmployeeDashboard() {
     try {
       setLoading(true);
       setError(null);
-      
-      const me = await api.get(`/auth/me`);
-      setUserName(me.data.name);
-      setDesignation(me.data.designation);
+      setUserName(user.name);
+      setDesignation(user.designation);
 
       const employeeRes = await api.get('/dashboard/employee-info');
       const { paidLeaves, department, employeeType, restrictedHolidays, compensatoryLeaves } = employeeRes.data;

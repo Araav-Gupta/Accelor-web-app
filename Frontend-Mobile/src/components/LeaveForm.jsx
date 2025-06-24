@@ -100,7 +100,7 @@ const LeaveForm = ({ navigation }) => {
     console.log('fetchLeaveRecords called');
     try {
       const response = await api.get('/leaves', {
-        params: { limit: 10, page: 1, sort: 'createdAt:-1', mine: true },
+        params: { limit: 20, page: 1, sort: 'createdAt:-1', mine: true },
       });
       console.log('Leave records response:', response.data);
       const records = Array.isArray(response.data.leaves) ? response.data.leaves : [];

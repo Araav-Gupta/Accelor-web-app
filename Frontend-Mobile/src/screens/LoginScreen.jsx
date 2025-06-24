@@ -10,13 +10,12 @@ import {
   Platform,
   ActivityIndicator,
   Keyboard,
-  Alert,
   ScrollView,
   TouchableWithoutFeedback
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthContext } from '../context/AuthContext.jsx';
-import logo from '../assets/favicon.png';
+import logo from '../../assets/icon.png'; // Updated to match app.json
 
 const LoginScreen = () => {
   const [email, setEmail] = useState('');
@@ -30,6 +29,13 @@ const LoginScreen = () => {
   const validateEmail = (email) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email);
+  };
+
+  const resetForm = () => {
+    setEmail('');
+    setPassword('');
+    setShowPassword(false);
+    setError('');
   };
 
   const handleLogin = async () => {
@@ -62,14 +68,18 @@ const LoginScreen = () => {
 
     try {
       await login(email, password);
-      // Login success - handled by AuthContext
+      resetForm(); // Reset form on successful login
     } catch (error) {
-      // Show server-specific error message if available
-      setError(error.response?.data?.message ||
-        error.message ||
-        'Login failed. Please check your credentials.');
-    } finally {
+      // Handle auth errors
       setLoading(false);
+      setError(error.message);
+      if (error.isAuthError && error.message.includes('Invalid credentials')) {
+        resetForm();
+      } else {
+        // For other errors, clear only password
+        setPassword('');
+        setShowPassword(false);
+      }
     }
   };
 
@@ -158,7 +168,7 @@ const LoginScreen = () => {
           </View>
         </TouchableWithoutFeedback>
       </ScrollView>
-    </KeyboardAvoidingView >
+    </KeyboardAvoidingView>
   );
 };
 
@@ -199,15 +209,6 @@ const styles = StyleSheet.create({
     maxWidth: 400,
     alignSelf: 'center',
   },
-  input: {
-    height: 50,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    paddingHorizontal: 15,
-    marginBottom: 20,
-    backgroundColor: '#f3f4f6',
-  },
   emailContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -232,9 +233,10 @@ const styles = StyleSheet.create({
   },
   passwordInput: {
     flex: 1,
-    paddingRight: 50,padding: 15,
+    paddingRight: 50,
+    padding: 15,
     color: '#1f2937',
-    fontSize: 16, // Make room for the icon
+    fontSize: 16,
   },
   input: {
     padding: 15,

@@ -13,18 +13,36 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.hrmsapp",
+      "infoPlist": {
+        "LSSupportsOpeningDocumentsInPlace": true,
+        "NSFileProviderDecorations": [],
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        }
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.hrmsapp",
+      "permissions": ["INTERNET"],
+      "config": {
+        "networkSecurityConfig": "@xml/network_security_config"
+      }
     },
     "web": {
       "favicon": "./assets/icon.png"
     },
-    "main": "index.js"
+    "main": "index.js",
+    "extra": {
+      "eas": {
+        "projectId": "your-project-id-here"
+      }
+    }
   }
 }

@@ -1,6 +1,5 @@
 import React, { createContext, useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Alert } from 'react-native';
 import { jwtDecode } from 'jwt-decode';
 import api from '../services/api.js';
 
@@ -9,21 +8,22 @@ const AuthContext = createContext({
   loading: true,
   error: null,
   login: () => Promise.reject(new Error('Login not implemented')),
-  logout: () => Promise.reject(new Error('Logout not implemented'))
+  logout: () => Promise.reject(new Error('Logout not implemented')),
+  refreshAuth: () => Promise.reject(new Error('Refresh not implemented'))
 });
 
 const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null); 
+  const [error, setError] = useState(null);
 
   const isTokenExpired = (token) => {
     try {
       const decoded = jwtDecode(token);
       return decoded.exp * 1000 < Date.now();
     } catch (err) {
-      console.error('Token validation error:', err);
-      return true; // Treat as expired if there's an error
+      console.error('Token validation error:', err.message);
+      return true;
     }
   };
 
@@ -37,11 +37,15 @@ const AuthProvider = ({ children }) => {
         ['userLoginType', userData.loginType || '']
       ]);
       setUser(userData);
+      setError(null);
       return userData;
     } catch (error) {
       console.error('Error fetching user data:', error);
-      logout();
-      throw error;
+      if (error.response?.status === 401) {
+        await logout();
+      }
+      setError(error.message || 'Failed to fetch user data');
+      return null;
     }
   }, []);
 
@@ -49,15 +53,13 @@ const AuthProvider = ({ children }) => {
     try {
       const token = await AsyncStorage.getItem('token');
       if (token && !isTokenExpired(token)) {
-        api.defaults.headers.Authorization = `Bearer ${token}`;
         await fetchUserData();
-      } else {
+      } else if (token) {
         await logout();
       }
     } catch (error) {
       console.error('checkAuthStatus error:', error);
-      setError(error);
-      Alert.alert('Error', 'Failed to check authentication status');
+      setError(error.message || 'Failed to check authentication status');
     } finally {
       setLoading(false);
     }
@@ -65,20 +67,53 @@ const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     try {
+      console.log('Attempting login with:', { email });
       const response = await api.post('/auth/login', { email, password });
-      const { token, user: userData } = response.data;
+      console.log('Login response:', response.status);
       
+      if (!response.data.token) {
+        throw new Error('No token received from server');
+      }
+      
+      const { token } = response.data;
       await AsyncStorage.setItem('token', token);
-      api.defaults.headers.Authorization = `Bearer ${token}`;
+      console.log('Token stored, fetching user data...');
       
-      // Fetch and set complete user data
       const user = await fetchUserData();
+      if (!user) throw new Error('Failed to fetch user data');
+      
+      console.log('Login successful for user:', user.email);
+      setError(null); // Clear any previous errors on successful login
       return user;
     } catch (error) {
-      const errorMessage = error.response?.data?.message || error.message || 'Login failed';
+      console.error('Login error details:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        config: {
+          url: error.config?.url,
+          method: error.config?.method,
+          data: error.config?.data
+        }
+      });
+      
+      // Clear the token on login failure
+      await AsyncStorage.removeItem('token');
+      setUser(null);
+      setLoading(false);
+      
+      // Get error message or use a default one
+      const errorMessage = error.response?.data?.message || 
+                         error.message || 
+                         'Login failed. Please check your credentials and try again.';
+      
       console.error('Login error:', errorMessage);
-      Alert.alert('Error', errorMessage);
-      throw new Error(errorMessage);
+      setError(errorMessage);
+      
+      // Create a new error with a clean message
+      const loginError = new Error(errorMessage);
+      loginError.isAuthError = true;
+      throw loginError;
     }
   };
 
@@ -90,13 +125,18 @@ const AuthProvider = ({ children }) => {
         'userDesignation',
         'userLoginType'
       ]);
-      delete api.defaults.headers.Authorization;
       setUser(null);
       setError(null);
     } catch (error) {
       console.error('Logout error:', error);
-      Alert.alert('Error', 'Failed to clear session');
+      setError('Failed to clear session');
     }
+  };
+
+  const refreshAuth = async () => {
+    setError(null);
+    setLoading(true);
+    await checkAuthStatus();
   };
 
   useEffect(() => {
@@ -109,7 +149,8 @@ const AuthProvider = ({ children }) => {
       loading, 
       error, 
       login, 
-      logout 
+      logout,
+      refreshAuth
     }}>
       {children}
     </AuthContext.Provider>

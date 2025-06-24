@@ -1,7 +1,8 @@
 import React, { useContext } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Linking } from 'react-native';
 import { Portal, Modal, Button } from 'react-native-paper';
 import { AuthContext } from '../context/AuthContext';
+import { useFileHandler } from './useFileHandler'; // Adjust path as needed
 
 const getFinalStatus = (status, loginType) => {
   if (!status) return 'Pending';
@@ -20,6 +21,9 @@ const getStatusColor = (status) => {
 
 const LeaveRecordsTable = React.memo(({ leaveRecords, selectedRecord, setSelectedRecord, modalVisible, setModalVisible }) => {
   const { user } = useContext(AuthContext);
+  
+  // Initialize useFileHandler with the selected record's medical certificate ID
+  const { handleViewFile, error: fileError } = useFileHandler(selectedRecord?.medicalCertificate?._id);
   
   // Filter records to only show those belonging to the current user
   const userRecords = React.useMemo(() => {
@@ -107,6 +111,11 @@ const LeaveRecordsTable = React.memo(({ leaveRecords, selectedRecord, setSelecte
           {selectedRecord && (
             <View>
               <Text style={styles.modalTitle}>Leave Request Details</Text>
+              {fileError && (
+                <Text style={[styles.detailValue, { color: '#ef4444', marginBottom: 12 }]}>
+                  {fileError}
+                </Text>
+              )}
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Employee:</Text>
                 <Text style={styles.detailValue}>{selectedRecord.employee?.name || selectedRecord.name || 'N/A'}</Text>
@@ -187,6 +196,20 @@ const LeaveRecordsTable = React.memo(({ leaveRecords, selectedRecord, setSelecte
                 <Text style={styles.detailLabel}>Emergency Contact:</Text>
                 <Text style={styles.detailValue}>{selectedRecord.emergencyContact || 'N/A'}</Text>
               </View>
+              {selectedRecord.medicalCertificate && (
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Medical Certificate:</Text>
+                  <TouchableOpacity
+                    style={[styles.actionButton, { paddingHorizontal: 12, paddingVertical: 8 }]}
+                    onPress={handleViewFile}
+                    disabled={!!fileError}
+                  >
+                    <Text style={styles.actionButtonText}>
+                      View {selectedRecord.medicalCertificate.filename || 'Medical Certificate'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
               <View style={{ marginTop: 16 }}>
                 <Text style={[styles.detailLabel, { marginBottom: 8 }]}>Approval Status:</Text>
                 <View style={styles.detailRow}>

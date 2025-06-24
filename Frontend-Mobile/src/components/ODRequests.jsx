@@ -73,13 +73,14 @@ const ODRequests = ({ navigation }) => {
         }
     }, [user]);
 
-    const getFinalStaus = (status) => {
+    const getFinalStatus = (status, loginType) => {
         if (!status) return 'Pending';
         if (status.hod === 'Rejected' || status.ceo === 'Rejected') return 'Rejected';
         if (status.ceo === 'Approved') return 'Approved';
-        if (status.hod === 'Approved') return 'Approved by HOD';
+        if (status.hod === 'Approved') return loginType === 'HOD' ? 'Pending' : 'Approved by HOD';
         return 'Pending';
-    }
+      };
+      
 
     const getStatusColor = (status) => {
         if (status === 'Rejected') return '#ef4444';
@@ -195,7 +196,7 @@ const ODRequests = ({ navigation }) => {
                                 [...odRequests].map((odRequest) => {
                                     let dateOut = odRequest.dateOut ? new Date(odRequest.dateOut) : null;
                                     let dateIn = odRequest.dateIn ? new Date(odRequest.dateIn) : null;
-                                    const status = getFinalStaus(odRequest.status);
+                                    const status = getFinalStatus(odRequest.status, user.loginType);
 
                                     return (
                                         <View style={styles.row} key={odRequest._id}>

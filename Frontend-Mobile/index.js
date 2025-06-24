@@ -1,21 +1,17 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { ActivityIndicator, View, StyleSheet, Text, Button, BackHandler } from 'react-native';
-import { AuthProvider, AuthContext } from './context/AuthContext.jsx';
-import { NotificationProvider } from './context/NotificationContext';
-import LoginScreen from './screens/LoginScreen.jsx';
-import EmployeeScreen from './screens/Employee.jsx';
-import HODStack from './navigation/HODStack';
+import { ActivityIndicator, View, StyleSheet, Text, Button } from 'react-native';
+import { AuthProvider, AuthContext } from './src/context/AuthContext.jsx';
+import { NotificationProvider } from './src/context/NotificationContext';
+import LoginScreen from './src/screens/LoginScreen.jsx';
+import EmployeeScreen from './src/screens/Employee.jsx';
+import HODStack from './src/navigation/HODStack';
 
 const Stack = createNativeStackNavigator();
 
 const AppContent = () => {
   const { user, loading, error, refreshAuth } = React.useContext(AuthContext);
-
-  const handleTryAgain = () => {
-    refreshAuth(); // Implement this in your AuthContext
-  };
 
   if (loading) {
     return (
@@ -26,14 +22,7 @@ const AppContent = () => {
     );
   }
 
-  if (error) {
-    return (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>{error.message}</Text>
-        <Button title="Try Again" onPress={handleTryAgain} />
-      </View>
-    );
-  }
+
 
   return (
     <NavigationContainer>
@@ -64,9 +53,7 @@ const AppContent = () => {
           <Stack.Screen
             name="Employee"
             component={EmployeeScreen}
-            options={{ title: 'Employee Dashboard' ,
-              headerShown: false
-            }}
+            options={{ title: 'Employee Dashboard', headerShown: false }}
           />
         )}
       </Stack.Navigator>
