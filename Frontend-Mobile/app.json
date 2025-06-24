@@ -17,9 +17,18 @@
       "bundleIdentifier": "com.hrmsapp",
       "infoPlist": {
         "LSSupportsOpeningDocumentsInPlace": true,
+        "UIFileSharingEnabled": true,
         "NSFileProviderDecorations": [],
         "NSAppTransportSecurity": {
-          "NSAllowsArbitraryLoads": true
+          "NSAllowsArbitraryLoads": false,
+          "NSExceptionDomains": {
+            "hrmsapp.com": {
+              "NSExceptionAllowsInsecureHTTPLoads": true,
+              "NSIncludesSubdomains": true
+            }
+          },
+          "NSPhotoLibraryUsageDescription": "We need access to your photos to upload documents",
+          "NSPhotoLibraryAddUsageDescription": "We need to save photos to your library"
         }
       }
     },
@@ -30,13 +39,32 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.hrmsapp",
-      "permissions": ["INTERNET"],
+      "permissions": [
+        "INTERNET",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "DOWNLOAD_WITHOUT_NOTIFICATION",
+        "FOREGROUND_SERVICE"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "content",
+              "mimeType": "*/*"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ],
       "config": {
         "networkSecurityConfig": "@xml/network_security_config"
       }
-    },
-    "web": {
-      "favicon": "./assets/icon.png"
     },
     "main": "index.js",
     "extra": {
