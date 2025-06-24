@@ -34,6 +34,7 @@ function Navbar() {
         ],
       },
       { text: "Payroll Download", path: "/admin/payroll-download" },
+      { text: "Generate Letters", path: "/admin/generate-letters" },
     ],
     CEO: [
       { text: "Dashboard", path: "/ceo/dashboard" },
@@ -126,7 +127,7 @@ function Navbar() {
 
   useEffect(() => {
     if (!socketRef.current) {
-      socketRef.current = io("http://localhost:5000", {
+      socketRef.current = io("https://accelor-web-app.onrender.com", {
         withCredentials: true,
       });
     }

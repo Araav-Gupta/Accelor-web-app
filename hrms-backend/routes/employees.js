@@ -12,6 +12,12 @@ import Audit from '../models/Audit.js';
 import { upload, uploadToGridFS, gfsReady } from '../middleware/fileupload.js';
 import { getGfs, gfsReady as gridFsReady } from '../utils/gridfs.js';
 import dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
+import Docxtemplater from 'docxtemplater';
+import PizZip from 'pizzip';
+import numberToWords from 'number-to-words';
+import moment from 'moment';
 
 dotenv.config();
 
@@ -190,17 +196,19 @@ router.get('/department', auth, role(['HOD', 'Employee']), async (req, res) => {
           {
             'fullDay.from': { $lte: parsedEnd },
             'fullDay.to': { $gte: parsedStart },
-            $or: [
+            $and: [
               { 'status.hod': { $in: ['Pending', 'Approved'] } },
               { 'status.ceo': { $in: ['Pending', 'Approved'] } },
-            ],
+              { 'status.admin': { $in: ['Pending', 'Acknowledged'] } }
+            ]
           },
           {
             'halfDay.date': { $gte: parsedStart, $lte: parsedEnd },
-            $or: [
+            $and: [
               { 'status.hod': { $in: ['Pending', 'Approved'] } },
               { 'status.ceo': { $in: ['Pending', 'Approved'] } },
-            ],
+              { 'status.admin': { $in: ['Pending', 'Acknowledged'] } }
+            ]
           },
         ],
       }).select('chargeGivenTo');
@@ -272,7 +280,7 @@ router.post('/', auth, role(['Admin']), ensureGfs, ensureDbConnection, checkForF
       'location', 'department', 'panNumber', 'paymentType', 'ctc', 'basic', 'inHand'
     ];
     for (const field of requiredFields) {
-      if (!req.body[field] || req.body[field].tostring().trim() === '') {
+      if (!req.body[field] || req.body[field].toString().trim() === '') {
         console.log(`Validation failed: ${field} is missing`);
         return res.status(400).json({ message: `${field} is required` });
       }
@@ -550,10 +558,10 @@ router.put('/:id', auth, ensureGfs, ensureDbConnection, checkForFiles, async (re
     if (updates.pfNumber && !/^\d{18}$/.test(updates.pfNumber)) {
       return res.status(400).json({ message: 'PF Number must be 18 digits' });
     }
-    if (updates.uanNumber && !/^\d{12}$/.test(updates.uanNumber)) {
+    if (updates.uanNumber && !/^\d{12}$/.test(uanNumber)) {
       return res.status(400).json({ message: 'UAN Number must be 12 digits' });
     }
-    if (updates.esiNumber && !/^\d{12}$/.test(updates.esiNumber)) {
+    if (updates.esiNumber && !/^\d{12}$/.test(esiNumber)) {
       return res.status(400).json({ message: 'ESI Number must be 12 digits' });
     }
     if (updates.dateOfBirth) updates.dateOfBirth = new Date(updates.dateOfBirth);
@@ -1024,6 +1032,108 @@ router.patch('/:id/emergency-leave-permission', auth, role(['Admin', 'HOD', 'CEO
     res.json(populatedEmployee);
   } catch (err) {
     console.error('Error toggling Emergency Leave permission:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// Generate letter for an employee (Admin only)
+router.post('/generate-letter', auth, role(['Admin']), async (req, res) => {
+  try {
+    const { employeeId, letterType } = req.body;
+
+    // Validate inputs
+    if (!employeeId || !letterType) {
+      return res.status(400).json({ message: 'Employee ID and letter type are required' });
+    }
+    if (!['appointment', 'confidentiality', 'training', 'service'].includes(letterType)) {
+      return res.status(400).json({ message: 'Invalid letter type' });
+    }
+
+    // Fetch employee
+    const employee = await Employee.findById(employeeId).populate('department reportingManager');
+    if (!employee) {
+      return res.status(404).json({ message: 'Employee not found' });
+    }
+
+    // Map letter type to template file
+    const templateMap = {
+      appointment: 'Appointment Letter.docx',
+      confidentiality: 'Confidentiality Agreement.docx',
+      training: 'Training Agreement.docx',
+      service: 'Service Agreement.docx',
+    };
+    const templatePath = path.join(process.cwd(), 'templates', templateMap[letterType]);
+    
+    // Check if template exists
+    if (!fs.existsSync(templatePath)) {
+      return res.status(500).json({ message: `Template file ${templateMap[letterType]} not found` });
+    }
+
+    // Prepare data for template
+    const data = {
+      name: employee.name || '',
+      permanentAddress: employee.permanentAddress || '',
+      mobileNumber: employee.mobileNumber || '',
+      email: employee.email || '',
+      designation: employee.designation || '',
+      dateOfJoining: employee.dateOfJoining ? moment(employee.dateOfJoining).format('DD MMMM YYYY') : '',
+      fatherName: employee.fatherName || '',
+      aadharNumber: employee.aadharNumber || '',
+      serviceAgreement: employee.serviceAgreement ? employee.serviceAgreement : '',
+      gender: employee.gender || '',
+    };
+
+    // Appointment Letter specific fields
+    if (letterType === 'appointment') {
+      data.prefix = employee.gender === 'Male' ? 'Mr.' : employee.gender === 'Female' ? 'Ms.' : '';
+      data.ctcInLakhs = employee.ctc ? (employee.ctc / 100000) : 0;
+      data.ctcInWords = employee.ctc ? numberToWords.toWords(Math.floor(employee.ctc / 100000)) : '';
+      data.probationPeriod = employee.employeeType === 'Probation' && employee.probationPeriod ? employee.probationPeriod : 0;
+    }
+
+    // Training Agreement specific fields
+    if (letterType === 'training') {
+      data.parentPrefix = employee.gender === 'Male' ? 'S/o' : 'D/o';
+    }
+
+    // Load template
+    const content = fs.readFileSync(templatePath, 'binary');
+    const zip = new PizZip(content);
+    const doc = new Docxtemplater(zip, {
+      paragraphLoop: true,
+      linebreaks: true,
+    });
+
+    // Render document with data
+    try {
+      doc.render(data);
+    } catch (error) {
+      console.error('Error rendering document:', error);
+      return res.status(500).json({ message: 'Error rendering document', error: error.message });
+    }
+
+    // Generate buffer
+    const buf = doc.getZip().generate({ type: 'nodebuffer' });
+
+    // Set headers for download
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.setHeader('Content-Disposition', `attachment; filename=${letterType}_${employee.employeeId}.docx`);
+
+    // Audit logging
+    try {
+      await Audit.create({
+        action: 'generate_letter',
+        user: req.user?.id || 'unknown',
+        details: `Generated ${letterType} letter for employee ${employee.employeeId}`,
+      });
+    } catch (auditErr) {
+      console.warn('Audit logging failed:', auditErr.message);
+    }
+
+    // Send buffer
+    res.send(buf);
+  } catch (err) {
+    console.error('Error generating letter:', err);
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
