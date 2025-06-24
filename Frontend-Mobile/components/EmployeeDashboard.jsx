@@ -369,27 +369,44 @@ function EmployeeDashboard() {
             {data.unclaimedOTRecords && (() => {
               console.log('Original unclaimedOTRecords:', data.unclaimedOTRecords);
               
-              const claimableRecords = data.unclaimedOTRecords.filter(record => {
-                // Convert hours to number and ensure it's at least 1
-                const hoursNum = parseFloat(record.hours) || 0;
-                const hasValidHours = hoursNum >= 1;
-                const isBeforeDeadline = !record.claimDeadline || new Date(record.claimDeadline) > new Date();
-                const isClaimable = hasValidHours && isBeforeDeadline;
-                
-                console.log('Record:', {
-                  id: record._id,
-                  date: record.date,
-                  hours: record.hours,
-                  hoursNum: hoursNum,
-                  claimDeadline: record.claimDeadline,
-                  currentTime: new Date().toISOString(),
-                  hasValidHours,
-                  isBeforeDeadline,
-                  isClaimable
-                });
-                
-                return isClaimable;
-              });
+              const claimableRecords = data.unclaimedOTRecords
+                .filter(record => {
+                  // Convert hours to number and ensure it's at least 1
+                  const hoursNum = parseFloat(record.hours) || 0;
+                  const hasValidHours = hoursNum >= 1;
+                  
+                  // Calculate deadline (end of next day if no specific deadline)
+                  const recordDate = new Date(record.date);
+                  const deadline = record.claimDeadline 
+                    ? new Date(record.claimDeadline)
+                    : new Date(recordDate.setDate(recordDate.getDate() + 1)); // End of next day
+                  
+                  const currentTime = new Date();
+                  const isBeforeDeadline = deadline > currentTime;
+                  
+                  // Additional check: Don't show records from more than 30 days ago
+                  const thirtyDaysAgo = new Date();
+                  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+                  const isWithin30Days = new Date(record.date) >= thirtyDaysAgo;
+                  
+                  const isClaimable = hasValidHours && isBeforeDeadline && isWithin30Days;
+                  
+                  if (isClaimable) {
+                    console.log('Claimable Record:', {
+                      id: record._id,
+                      date: record.date,
+                      hours: record.hours,
+                      hoursNum: hoursNum,
+                      deadline: deadline.toISOString(),
+                      currentTime: currentTime.toISOString(),
+                      isWithin30Days,
+                      isClaimable
+                    });
+                  }
+                  
+                  return isClaimable;
+                })
+                .sort((a, b) => new Date(b.date) - new Date(a.date)); // Sort by most recent first
               
               console.log('Filtered claimableRecords:', claimableRecords);
               

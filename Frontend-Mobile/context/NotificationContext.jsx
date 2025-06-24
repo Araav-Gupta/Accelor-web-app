@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
 import { useAuth } from './AuthContext';
 import api from '../services/api';
-import { EXPO_PUBLIC_API_URL } from '@env';
+const EXPO_PUBLIC_API_URL = 'http://192.168.1.21:5001/api';
 
 const NotificationContext = createContext();
 
@@ -15,19 +15,42 @@ const NotificationProvider = ({ children }) => {
   // Fetch initial notifications
   const fetchNotifications = async () => {
     try {
-      const response = await api.get('/notifications');
-      const unread = response.data.filter(n => !n.read).length;
-      setNotifications(response.data);
-      setUnreadCount(unread);
+      const response = await api.get('/notifications').catch(error => {
+        if (error.response?.status === 500) {
+          console.error('Server error while fetching notifications:', error.response?.data);
+          // You might want to show a user-friendly message or retry logic here
+        }
+        throw error;
+      });
+      
+      if (response?.data) {
+        const unread = response.data.filter(n => !n.read).length;
+        setNotifications(response.data || []);
+        setUnreadCount(unread);
+      }
     } catch (error) {
-      console.error('Error fetching notifications:', error);
+      console.error('Error in fetchNotifications:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
     }
   };
-
   // Mark notification as read
   const markAsRead = async (notificationId) => {
+    if (!notificationId) {
+      console.warn('markAsRead called with invalid notificationId');
+      return;
+    }
+    
     try {
-      await api.put(`/notifications/${notificationId}/read`);
+      await api.put(`/notifications/${notificationId}/read`).catch(error => {
+        if (error.response?.status === 500) {
+          console.error('Server error while marking notification as read:', error.response?.data);
+        }
+        throw error;
+      });
+      
       setNotifications(prev =>
         prev.map(n =>
           n._id === notificationId ? { ...n, read: true } : n
@@ -35,19 +58,42 @@ const NotificationProvider = ({ children }) => {
       );
       setUnreadCount(prev => Math.max(0, prev - 1));
     } catch (error) {
-      console.error('Error marking notification as read:', error);
+      console.error('Error in markAsRead:', {
+        message: error.message,
+        notificationId,
+        status: error.response?.status
+      });
     }
   };
 
   // Mark all notifications as read
   const markAllAsRead = async () => {
     try {
-      const unreadNotifications = notifications.filter(n => !n.read);
+      const unreadNotifications = notifications.filter(n => n?._id && !n.read);
+      
+      if (unreadNotifications.length === 0) {
+        console.log('No unread notifications to mark as read');
+        return;
+      }
+  
+      console.log(`Marking ${unreadNotifications.length} notifications as read`);
+      
       for (const notification of unreadNotifications) {
-        await markAsRead(notification._id);
+        if (!notification?._id) {
+          console.warn('Skipping notification with invalid ID:', notification);
+          continue;
+        }
+        
+        try {
+          console.log('Marking notification as read:', notification._id);
+          await markAsRead(notification._id);
+        } catch (error) {
+          console.error(`Error marking notification ${notification._id} as read:`, error);
+          // Continue with next notification even if one fails
+        }
       }
     } catch (error) {
-      console.error('Error marking all notifications as read:', error);
+      console.error('Unexpected error in markAllAsRead:', error);
     }
   };
 
@@ -56,17 +102,23 @@ const NotificationProvider = ({ children }) => {
     if (!user?.id) return;
     console.log('User ID:', user.id);
     console.log('expo url:', EXPO_PUBLIC_API_URL);
-    const socketUrl = EXPO_PUBLIC_API_URL.replace(/^http/, 'ws');
+    
+    // For production, use the same URL but with wss:// and add /socket.io path
+    const baseUrl = EXPO_PUBLIC_API_URL.replace('/api', '');
+    const socketUrl = baseUrl.replace('https://', 'wss://').replace('http://', 'ws://');
     console.log('Connecting to WebSocket at:', socketUrl);
     
     const socketInstance = io(socketUrl, {
       path: '/socket.io',
       query: { employeeId: user.employeeId },
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'], // Try polling first, then upgrade to websocket
+      secure: true,
       withCredentials: true,
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
+      timeout: 10000, // Increase timeout to 10 seconds
+      forceNew: true, // Force new connection
       timeout: 20000,
       autoConnect: true
     });
@@ -78,7 +130,13 @@ const NotificationProvider = ({ children }) => {
     };
 
     const handleConnect = () => {
-      console.log('Socket connected');
+      console.log('Socket connected with ID:', socketInstance.id);
+      if (socketInstance && user?.employeeId) {
+        console.log('Joining room for employee:', user.employeeId);
+        socketInstance.emit('join', user.employeeId);
+      } else {
+        console.log('Cannot join room - missing socket instance or employeeId');
+      }
       fetchNotifications();
     };
 

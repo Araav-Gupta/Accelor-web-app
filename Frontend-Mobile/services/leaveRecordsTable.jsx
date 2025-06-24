@@ -3,11 +3,11 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Portal, Modal, Button } from 'react-native-paper';
 import { AuthContext } from '../context/AuthContext';
 
-const getFinalStatus = (status) => {
+const getFinalStatus = (status, loginType) => {
   if (!status) return 'Pending';
   if (status.hod === 'Rejected' || status.ceo === 'Rejected') return 'Rejected';
   if (status.ceo === 'Approved') return 'Approved';
-  if (status.hod === 'Approved') return 'Approved by HOD';
+  if (status.hod === 'Approved') return loginType === 'HOD' ? 'Pending' : 'Approved by HOD';
   return 'Pending';
 };
 
@@ -58,7 +58,7 @@ const LeaveRecordsTable = React.memo(({ leaveRecords, selectedRecord, setSelecte
                 date = record.halfDay.date ? new Date(record.halfDay.date) : null;
               }
               const leaveType = record.leaveType;
-              const status = getFinalStatus(record.status);
+              const status = getFinalStatus(record.status, user.loginType);
               return (
                 <View key={record._id} style={styles.row}>
                   <Text style={[styles.cell, { flex: 2 }]}>

@@ -1,4 +1,4 @@
-import React, { useContext } from 'react';
+import React, { useContext, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { createDrawerNavigator, DrawerContentScrollView, DrawerItemList, DrawerItem } from '@react-navigation/drawer';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -17,6 +17,7 @@ import { AuthContext } from '../context/AuthContext';
 import EmployeeList from '../components/EmployeeList.jsx';
 import HODEmployeeProfile from '../components/HODEmployeeProfile.jsx';
 import OTRequest from '../components/OTRequest.jsx';
+import { eligibleDepartments } from '../services/constants';
 // import Reports from '../components/Reports';
 
 const Drawer = createDrawerNavigator();
@@ -24,22 +25,38 @@ const Stack = createStackNavigator();
 
 const HODDashboard = () => {
   const navigation = useNavigation();
-  const { logout } = useContext(AuthContext);
+  const { user, logout } = useContext(AuthContext);
+  const [hasAccess, setHasAccess] = React.useState(false);
 
+  useEffect(() => {
+    if (user) {
+      const isHOD = user.loginType === 'HOD';
+      const isEligibleDepartment = eligibleDepartments.some(
+        dept => dept === user.department.name || dept === user.department
+      );
+      const accessGranted = isHOD && isEligibleDepartment;
+      setHasAccess(accessGranted);
+      
+      // Debug logs
+      console.log('user:', user);
+      console.log('User department:', user.department);
+      console.log('Is HOD/Admin:', isHOD);
+      console.log('Is eligible department:', isEligibleDepartment);
+      console.log('Access granted:', accessGranted);
+    }
+  }, [user, navigation]);
   const handleLogout = async () => {
     try {
       await logout();
-      navigation.dispatch(
-        CommonActions.reset({
-          index: 0,
-          routes: [{ name: 'Login' }], // or 'Login' depending on your navigator
-        })
-      );
     } catch (error) {
       console.error('Logout error:', error);
       Alert.alert('Error', 'Failed to logout');
     }
   }
+
+  const isOTEligible = user && eligibleDepartments.some(
+    dept => dept === user.department.name || dept === user.department
+  );
 
   const MainDrawer = () => (
     <Drawer.Navigator
@@ -162,7 +179,7 @@ const HODDashboard = () => {
           )
         }}
       />
-      
+
       <Drawer.Screen
         name="Leave Requests"
         component={LeaveRequests}
@@ -192,7 +209,8 @@ const HODDashboard = () => {
         }}
       />
 
-<Drawer.Screen
+      {isOTEligible && (
+      <Drawer.Screen
         name="OT Requests"
         component={OTRequest}
         options={{
@@ -206,7 +224,7 @@ const HODDashboard = () => {
             <Ionicons name="document-text" size={20} color={color} />
           )
         }}
-      />
+      />)}
       <Drawer.Screen
         name="Employee List"
         component={EmployeeList}

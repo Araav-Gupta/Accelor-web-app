@@ -11,7 +11,7 @@
   "dependencies": {
     "@react-native-async-storage/async-storage": "^2.1.2",
     "@react-native-community/blur": "^4.4.1",
-    "@react-native-community/datetimepicker": "^8.4.1",
+    "@react-native-community/datetimepicker": "^8.4.2",
     "@react-native-community/netinfo": "^11.4.1",
     "@react-native-picker/picker": "^2.11.0",
     "@react-navigation/bottom-tabs": "^7.3.14",
@@ -30,6 +30,7 @@
     "expo-status-bar": "~2.2.3",
     "express": "^5.1.0",
     "jwt-decode": "^4.0.0",
+    "latest": "^0.2.0",
     "lucide-react-native": "^0.515.0",
     "nodemon": "^3.1.10",
     "react": "19.0.0",

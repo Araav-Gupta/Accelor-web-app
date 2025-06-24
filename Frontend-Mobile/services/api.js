@@ -4,7 +4,7 @@ import { Alert } from 'react-native';
 import { EXPO_PUBLIC_API_URL } from '@env';
 import * as FileSystem from 'expo-file-system';
 // Set default API URL if not provided
-const API_URL = 'http://192.168.59.225:5001/api';
+const API_URL = 'http://192.168.1.21:5001/api';
 
 // Log the API URL for debugging (remove in production)
 console.log('API URL:', API_URL);
