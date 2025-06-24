@@ -223,7 +223,7 @@ export const fetchFileAsBlob = async (fileId, fileName = 'file') => {
     await FileSystem.makeDirectoryAsync(cacheDir, { intermediates: true });
     
     const extension = fileName.includes('.') ? fileName.split('.').pop().toLowerCase() : 'pdf';
-    const filePath = `${cacheDir}${fileId}_${Date.now()}.${extension}`;
+    const filePath = `${cacheDir}${fileId}.${extension}`;
 
     // Clean up old cache files (older than 24 hours)
     const cacheFiles = await FileSystem.readDirectoryAsync(cacheDir);

@@ -15,7 +15,8 @@ import { AuthContext } from '../context/AuthContext.jsx';
 import { PieChart, BarChart } from 'react-native-chart-kit';
 import { Dimensions } from 'react-native';
 import io from 'socket.io-client';
-import api from '../services/api.js';
+import api, {fetchFileAsBlob} from '../services/api.js';
+import * as FileSystem from 'expo-file-system';
 
 function EmployeeDashboard() {
   const { user } = useContext(AuthContext);
@@ -40,6 +41,9 @@ function EmployeeDashboard() {
   const [error, setError] = useState(null);
   const [socket, setSocket] = useState(null);
   const [isEligible, setIsEligible] = useState(false);
+  // const { fileSrc: profilePictureSrc, error: profilePictureError, handleViewFile: handleViewProfilePicture } = useFileHandler(user.profilePicture);
+  const [profileUri, setProfileUri] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(false);
 
   const calculateAttendanceStats = useCallback(() => {
     if (!Array.isArray(data.attendanceData)) return { present: 0, absent: 0, leave: 0 };
@@ -150,8 +154,9 @@ function EmployeeDashboard() {
         // Add OT records if eligible
 
         newData.unclaimedOTRecords = leaveData.data.unclaimedOTRecords || [];
-        console.log('Fetchend unclaimed OT Records:',{
-          unclaimed: newData.unclaimedOTRecords})
+        console.log('Fetchend unclaimed OT Records:', {
+          unclaimed: newData.unclaimedOTRecords
+        })
       } else {
         // Ensure empty arrays if not eligible
         newData.otClaimRecords = [];
@@ -169,7 +174,7 @@ function EmployeeDashboard() {
   const handleClaimOT = async (record) => {
     try {
       setClaimingId(record._id);
-      
+
       const response = await api.post('/ot', {
         date: record.date,
         hours: parseFloat(record.hours),
@@ -182,7 +187,7 @@ function EmployeeDashboard() {
 
       // Refresh dashboard data to show updated records
       await fetchData();
-      
+
       Alert.alert('Success', 'OT claim submitted successfully!');
     } catch (error) {
       console.error('Error claiming OT:', error);
@@ -191,6 +196,40 @@ function EmployeeDashboard() {
       setClaimingId(null);
     }
   };
+
+  useEffect(() => {
+    const loadProfilePicture = async () => {
+      if (!user?.profilePicture) return;
+      setProfileLoading(true);
+
+      try {
+        const cacheDir = `${FileSystem.cacheDirectory}downloaded_files/`;
+        const extension = 'jpg'; // or png if you're using that
+        const filePath = `${cacheDir}${user.profilePicture}.${extension}`;
+        const fileInfo = await FileSystem.getInfoAsync(filePath);
+
+        const isCacheValid = fileInfo.exists &&
+          Date.now() - fileInfo.modificationTime * 1000 < 24 * 60 * 60 * 1000 &&
+          fileInfo.size > 0;
+
+        if (isCacheValid) {
+          console.log('Using cached profile picture');
+          setProfileUri(filePath);
+        } else {
+          console.log('Downloading new profile picture');
+          const path = await fetchFileAsBlob(user.profilePicture, `profile.${extension}`);
+          setProfileUri(path);
+        }
+      } catch (err) {
+        console.error('Failed to load profile picture:', err.message);
+      } finally {
+        setProfileLoading(false);
+      }
+    };
+
+    loadProfilePicture();
+  }, [user?.profilePicture]);
+
 
   useEffect(() => {
     if (!user?.employeeId) return;
@@ -229,16 +268,24 @@ function EmployeeDashboard() {
 
   return (
     <View style={styles.container}>
-      <ScrollView 
-      style={{ flex: 1 }}
-      contentContainerStyle={{ flexGrow: 1 }}
-      scrollEnabled={true}
-      bounces={true}
-      showsVerticalScrollIndicator={true}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ flexGrow: 1 }}
+        scrollEnabled={true}
+        bounces={true}
+        showsVerticalScrollIndicator={true}>
         <View style={styles.profileSection}>
           <View style={styles.profileContainer}>
             {user?.profilePicture ? (
-              <Image source={{ uri: user.profilePicture }} style={styles.profileImage} resizeMode="cover" />
+              <TouchableOpacity onPress={() => handleViewFile()} >
+                {profileLoading ? (
+                  <ActivityIndicator size="small" color="#0000ff" />
+                ) : profileUri ? (
+                  <Image source={{ uri: profileUri }} style={styles.profileImage} />
+                ) : (
+                  <MaterialIcons name="person" size={50} color="#666666" style={styles.defaultIcon} />
+                )}
+              </TouchableOpacity>
             ) : (
               <MaterialIcons name="person" size={50} color="#666666" style={styles.defaultIcon} />
             )}<View style={styles.nameContainer}>
@@ -348,7 +395,7 @@ function EmployeeDashboard() {
                 withVerticalLabels={true}
                 segments={4}
                 style={{
-                  padding:10,
+                  padding: 10,
                   marginVertical: 8,
                   borderRadius: 16,
                   alignSelf: 'center'
@@ -366,29 +413,29 @@ function EmployeeDashboard() {
             <Text style={styles.sectionTitle}>Pending OT Claims</Text>
             {data.unclaimedOTRecords && (() => {
               console.log('Original unclaimedOTRecords:', data.unclaimedOTRecords);
-              
+
               const claimableRecords = data.unclaimedOTRecords
                 .filter(record => {
                   // Convert hours to number and ensure it's at least 1
                   const hoursNum = parseFloat(record.hours) || 0;
                   const hasValidHours = hoursNum >= 1;
-                  
+
                   // Calculate deadline (end of next day if no specific deadline)
                   const recordDate = new Date(record.date);
-                  const deadline = record.claimDeadline 
+                  const deadline = record.claimDeadline
                     ? new Date(record.claimDeadline)
                     : new Date(recordDate.setDate(recordDate.getDate() + 1)); // End of next day
-                  
+
                   const currentTime = new Date();
                   const isBeforeDeadline = deadline > currentTime;
-                  
+
                   // Additional check: Don't show records from more than 30 days ago
                   const thirtyDaysAgo = new Date();
                   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
                   const isWithin30Days = new Date(record.date) >= thirtyDaysAgo;
-                  
+
                   const isClaimable = hasValidHours && isBeforeDeadline && isWithin30Days;
-                  
+
                   if (isClaimable) {
                     console.log('Claimable Record:', {
                       id: record._id,
@@ -401,13 +448,13 @@ function EmployeeDashboard() {
                       isClaimable
                     });
                   }
-                  
+
                   return isClaimable;
                 })
                 .sort((a, b) => new Date(b.date) - new Date(a.date)); // Sort by most recent first
-              
+
               console.log('Filtered claimableRecords:', claimableRecords);
-              
+
               return claimableRecords.length > 0 ? (
                 claimableRecords.map((record, index) => (
                   <View key={`unclaimed-${index}`} style={styles.otRecord}>
@@ -420,23 +467,23 @@ function EmployeeDashboard() {
                         })}
                       </Text>
                       <Text style={styles.otRecordDeadline}>
-                        Claim by: {record.claimDeadline 
+                        Claim by: {record.claimDeadline
                           ? new Date(record.claimDeadline).toLocaleString('en-US', {
-                              day: 'numeric',
-                              month: 'short',
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })
+                            day: 'numeric',
+                            month: 'short',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })
                           : 'End of next day' // Default text when claimDeadline is null
                         }
                       </Text>
                     </View>
                     <View style={styles.otRecordRight}>
                       <Text style={styles.otRecordHours}>{record.hours} hrs</Text>
-                      <TouchableOpacity 
+                      <TouchableOpacity
                         style={[
-                          styles.claimButton, 
-                          (claimingId === record._id || (record.claimDeadline && new Date(record.claimDeadline) < new Date())) && 
+                          styles.claimButton,
+                          (claimingId === record._id || (record.claimDeadline && new Date(record.claimDeadline) < new Date())) &&
                           styles.claimButtonDisabled
                         ]}
                         onPress={() => handleClaimOT(record)}
@@ -495,22 +542,23 @@ const styles = StyleSheet.create({
   },
   profileSection: {
     alignItems: 'center',
-    marginBottom: 24,
-    padding: 20,
+    marginBottom: 10,
+    padding: 0,
   },
   profileContainer: {
     alignItems: 'center',
-
     flexDirection: 'row',
     justifyContent: 'space-between',
-
   },
   profileImage: {
-    width: 50,
-    height: 50,
-    borderRadius: 50,
+    width: 60,
+    height: 60,
+    borderRadius: 60,
     marginBottom: 20,
     marginRight: 20,
+
+    marginLeft: 10,
+    marginTop: 20,
     flex: 1,
   },
   defaultIcon: {
@@ -567,7 +615,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 3.84,
     elevation: 5
-    
+
   },
   sectionTitle: {
     fontSize: 16,

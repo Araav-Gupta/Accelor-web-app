@@ -37,6 +37,7 @@ const AuthProvider = ({ children }) => {
         ['userLoginType', userData.loginType || '']
       ]);
       setUser(userData);
+      console.log('User data fetched successfully:', userData);
       setError(null);
       return userData;
     } catch (error) {
