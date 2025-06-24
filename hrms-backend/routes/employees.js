@@ -737,13 +737,16 @@ router.get('/files/:fileId', auth, ensureGfs, async (req, res) => {
     }
 
     console.log('Streaming file:', fileId);
-    res.set('Content-Type', files[0].contentType);
+    res.set({
+      'Content-Type': files[0].contentType,
+      'Content-Length': files[0].length,
+      'Content-Disposition': `attachment; filename="${files[0].filename}"`,
+    });
     const downloadStream = gfs.openDownloadStream(fileId);
-    downloadStream.on('error', (err) => {
+    downloadStream.pipe(res).on('error', (err) => {
       console.error('Download stream error:', err);
       res.status(500).json({ message: 'Error streaming file' });
     });
-    downloadStream.pipe(res);
   } catch (err) {
     console.error('Error fetching file:', err);
     res.status(500).json({ message: 'Server error', error: err.message });

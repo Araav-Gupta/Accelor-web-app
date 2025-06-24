@@ -1,9 +1,10 @@
-// components/DocumentUploader.jsx
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import { fetchFileAsBlob, openFile } from '../services/api'; // Import the file handling functions
+import { useFileHandler } from './useFileHandler';
+import ImageViewing from 'react-native-image-viewing';
+import { ActivityIndicator } from 'react-native';
 
 const DocumentUploader = ({
   title,
@@ -14,43 +15,43 @@ const DocumentUploader = ({
   fileErrors,
   isLocked,
 }) => {
+  const hasExistingFile = profile?.documents?.[field];
+  const selectedFile = files?.[field];
+
+  // Use the useFileHandler hook for file viewing
+  const { 
+    handleViewFile: handleViewFileHook, 
+    isImageViewerVisible, 
+    setIsImageViewerVisible, 
+    imageUri,
+    isLoading: isFileLoading,
+    error: fileError
+  } = useFileHandler(hasExistingFile, title);
+
   const handleDocumentPick = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: 'application/pdf',
+        type: ['application/pdf', 'image/*'],
         copyToCacheDirectory: true,
       });
 
       if (!result.canceled) {
         const file = {
           uri: result.assets[0].uri,
-          type: 'application/pdf',
+          type: result.assets[0].mimeType || 'application/octet-stream',
           name: result.assets[0].name,
         };
         setFiles((prev) => ({ ...prev, [field]: file }));
       }
     } catch (err) {
       console.error('Document pick error:', err);
+      Alert.alert('Error', 'Failed to select file. Please try again.');
     }
   };
 
-  const [loading, setLoading] = React.useState(false);
-  const hasExistingFile = profile?.documents?.[field];
-  const selectedFile = files?.[field];
-
-  const handleViewFile = async (fileId, fileName) => {
-    if (!fileId) return;
-    
-    try {
-      setLoading(true);
-      const fileUri = await fetchFileAsBlob(fileId, fileName || 'document.pdf');
-      await openFile(fileUri);
-    } catch (error) {
-      console.error('Error opening file:', error);
-      Alert.alert('Error', 'Could not open the file. Please try again.');
-    } finally {
-      setLoading(false);
-    }
+  const handleViewFile = async () => {
+    if (!hasExistingFile) return;
+    await handleViewFileHook();
   };
 
   return (
@@ -64,32 +65,47 @@ const DocumentUploader = ({
           disabled={isLocked}
         >
           <MaterialIcons name="upload-file" size={20} color="white" />
-          <Text style={styles.buttonText}>Upload PDF</Text>
+          <Text style={styles.buttonText}>Upload File</Text>
         </TouchableOpacity>
 
         {hasExistingFile && (
           <TouchableOpacity
-            style={[styles.button, styles.viewButton]}
-            onPress={() => handleViewFile(hasExistingFile, title)}
-            disabled={loading}
+            style={[styles.button, styles.viewButton, isFileLoading && styles.disabled]}
+            onPress={handleViewFile}
+            disabled={isFileLoading}
           >
-            {loading ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <>
-                <MaterialIcons name="visibility" size={20} color="white" />
-                <Text style={styles.buttonText}>View</Text>
-              </>
-            )}
+            <MaterialIcons name="visibility" size={20} color="white" />
+            <Text style={styles.buttonText}>
+              {isFileLoading ? 'Loading...' : 'View'}
+            </Text>
           </TouchableOpacity>
         )}
       </View>
 
-      {selectedFile && <Text style={styles.fileName}>{selectedFile.name}</Text>}
-      {hasExistingFile && !selectedFile && (
-        <Text style={styles.fileName}>File ID: {hasExistingFile}</Text>
+      {selectedFile && (
+        <Text style={styles.fileName} numberOfLines={1} ellipsizeMode="tail">
+          {selectedFile.name}
+        </Text>
       )}
-      {fileErrors?.[field] && <Text style={styles.error}>{fileErrors[field]}</Text>}
+      {hasExistingFile && !selectedFile && (
+        <Text style={styles.fileName} numberOfLines={1} ellipsizeMode="tail">
+          {title} (Click View to open)
+        </Text>
+      )}
+      {fileError && (
+        <Text style={styles.error}>{fileError}</Text>
+      )}
+      {fileErrors?.[field] && (
+        <Text style={styles.error}>{fileErrors[field]}</Text>
+      )}
+      
+      {/* Image Viewer Modal */}
+      <ImageViewing
+        images={imageUri ? [imageUri] : []}
+        imageIndex={0}
+        visible={isImageViewerVisible}
+        onRequestClose={() => setIsImageViewerVisible(false)}
+      />
     </View>
   );
 };
