@@ -1,8 +1,9 @@
-import React, { useContext } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Linking } from 'react-native';
+import React, { useContext, useCallback } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { Portal, Modal, Button } from 'react-native-paper';
 import { AuthContext } from '../context/AuthContext';
-import { useFileHandler } from './useFileHandler'; // Adjust path as needed
+import { useFileHandler } from '../Hooks/useFileHandler';
+import ImageViewing from 'react-native-image-viewing';
 
 const getFinalStatus = (status, loginType) => {
   if (!status) return 'Pending';
@@ -22,8 +23,25 @@ const getStatusColor = (status) => {
 const LeaveRecordsTable = React.memo(({ leaveRecords, selectedRecord, setSelectedRecord, modalVisible, setModalVisible }) => {
   const { user } = useContext(AuthContext);
   
-  // Initialize useFileHandler with the selected record's medical certificate ID
-  const { handleViewFile, error: fileError } = useFileHandler(selectedRecord?.medicalCertificate?._id);
+  // Initialize useFileHandler with fileId and fileName
+  const { 
+    handleViewFile, 
+    error: fileError, 
+    isImageViewerVisible, 
+    setIsImageViewerVisible, 
+    imageUri,
+    isLoading: isFileLoading
+  } = useFileHandler(
+    selectedRecord?.medicalCertificate?._id,
+    selectedRecord?.medicalCertificate?.filename
+  );
+
+  // Handle view file button press
+  const onViewFile = useCallback(async () => {
+    if (selectedRecord?.medicalCertificate?._id) {
+      await handleViewFile();
+    }
+  }, [handleViewFile, selectedRecord]);
   
   // Filter records to only show those belonging to the current user
   const userRecords = React.useMemo(() => {
@@ -197,17 +215,24 @@ const LeaveRecordsTable = React.memo(({ leaveRecords, selectedRecord, setSelecte
                 <Text style={styles.detailValue}>{selectedRecord.emergencyContact || 'N/A'}</Text>
               </View>
               {selectedRecord.medicalCertificate && (
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Medical Certificate:</Text>
-                  <TouchableOpacity
-                    style={[styles.actionButton, { paddingHorizontal: 12, paddingVertical: 8 }]}
-                    onPress={handleViewFile}
-                    disabled={!!fileError}
+                <View style={styles.actions}>
+                  <Button 
+                    mode="contained" 
+                    onPress={onViewFile} 
+                    style={styles.actionButton}
+                    disabled={isFileLoading}
                   >
-                    <Text style={styles.actionButtonText}>
-                      View {selectedRecord.medicalCertificate.filename || 'Medical Certificate'}
+                    {isFileLoading ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      'View Certificate'
+                    )}
+                  </Button>
+                  {fileError && (
+                    <Text style={styles.errorText}>
+                      {fileError}
                     </Text>
-                  </TouchableOpacity>
+                  )}
                 </View>
               )}
               <View style={{ marginTop: 16 }}>
@@ -262,6 +287,15 @@ const LeaveRecordsTable = React.memo(({ leaveRecords, selectedRecord, setSelecte
               </Button>
             </View>
           )}
+          <ImageViewing
+            images={imageUri ? [imageUri] : []}
+            imageIndex={0}
+            visible={isImageViewerVisible}
+            onRequestClose={() => setIsImageViewerVisible(false)}
+            animationType="fade"
+            swipeToCloseEnabled={true}
+            doubleTapToZoomEnabled={true}
+          />
         </Modal>
       </Portal>
     </View>
@@ -356,6 +390,11 @@ const styles = StyleSheet.create({
     color: '#64748b',
     marginTop: 16,
     fontStyle: 'italic',
+  },
+  errorText: {
+    color: '#ef4444',
+    marginTop: 8,
+    fontSize: 12,
   },
 });
 
