@@ -282,32 +282,44 @@ router.get('/employee-stats', auth, role(['Employee', 'HOD', 'Admin']), async (r
       };
       const leavesThisMonth = await Leave.find({
         ...leaveQueryBase,
-        $or: [
-          { 'fullDay.from': { $gte: startOfMonth, $lte: endOfMonth } },
-          { 'halfDay.date': { $gte: startOfMonth, $lte: endOfMonth } },
-        ],
+        'fullDay.from': { $gte: startOfMonth, $lte: endOfMonth }
+        // Original: Included halfDay.date
+        // $or: [
+        //   { 'fullDay.from': { $gte: startOfMonth, $lte: endOfMonth } },
+        //   { 'halfDay.date': { $gte: startOfMonth, $lte: endOfMonth } }
+        // ]
       });
       const leavesThisYear = await Leave.find({
         ...leaveQueryBase,
-        $or: [
-          { 'fullDay.from': { $gte: startOfYear, $lte: endOfYear } },
-          { 'halfDay.date': { $gte: startOfYear, $lte: endOfYear } },
-        ],
+        'fullDay.from': { $gte: startOfYear, $lte: endOfYear }
+        // Original: Included halfDay.date
+        // $or: [
+        //   { 'fullDay.from': { $gte: startOfYear, $lte: endOfYear } },
+        //   { 'halfDay.date': { $gte: startOfYear, $lte: endOfYear } }
+        // ]
       });
 
       console.log(`Leaves this month for ${employeeId}:`, leavesThisMonth.map(l => ({
         _id: l._id,
         leaveType: l.leaveType,
-        fullDay: l.fullDay,
-        halfDay: l.halfDay,
+        fullDay: l.fullDay
+        // Original: Included halfDay
+        // halfDay: l.halfDay
       })));
 
       const calculateDays = (leave) => {
-        if (leave.halfDay && leave.halfDay.date) {
-          if (leave.fullDay && (leave.fullDay.from || leave.fullDay.to)) {
-            console.warn(`Leave ${leave._id} has both halfDay and fullDay for ${employeeId}`);
-            return 0.5;
-          }
+        // Original: Checked halfDay.date
+        // if (leave.halfDay && leave.halfDay.date) {
+        //   if (leave.fullDay && (leave.fullDay.from || leave.fullDay.to)) {
+        //     console.warn(`Leave ${leave._id} has both halfDay and fullDay for ${employeeId}`);
+        //     return 0.5;
+        //   }
+        //   console.log(`Leave ${leave._id}: 0.5 days (half-day)`);
+        //   return 0.5;
+        // }
+
+        // Updated: Check fullDay.fromDuration for half-day
+        if (leave.fullDay.fromDuration === 'half' && leave.fullDay.from === leave.fullDay.to) {
           console.log(`Leave ${leave._id}: 0.5 days (half-day)`);
           return 0.5;
         }
@@ -318,7 +330,9 @@ router.get('/employee-stats', auth, role(['Employee', 'HOD', 'Admin']), async (r
             console.warn(`Invalid leave ${leave._id}: from (${from}) after to (${to})`);
             return 0;
           }
-          const days = ((to - from) / (1000 * 60 * 60 * 24)) + 1;
+          let days = ((to - from) / (1000 * 60 * 60 * 24)) + 1;
+          if (leave.fullDay.fromDuration === 'half') days -= 0.5;
+          if (leave.fullDay.toDuration === 'half') days -= 0.5;
           console.log(`Leave ${leave._id}: ${days} days from ${from} to ${to}`);
           return days;
         }
@@ -347,23 +361,31 @@ router.get('/employee-stats', auth, role(['Employee', 'HOD', 'Admin']), async (r
     const unpaidLeavesQuery = {
       employeeId,
       leaveType: 'Leave Without Pay(LWP)',
-      $or: [
-        { 'fullDay.from': { $gte: startOfMonth, $lte: endOfMonth } },
-        { 'halfDay.date': { $gte: startOfMonth, $lte: endOfMonth } },
-      ],
+      'fullDay.from': { $gte: startOfMonth, $lte: endOfMonth },
+      // Original: Included halfDay.date
+      // $or: [
+      //   { 'fullDay.from': { $gte: startOfMonth, $lte: endOfMonth } },
+      //   { 'halfDay.date': { $gte: startOfMonth, $lte: endOfMonth } }
+      // ],
       'status.hod': 'Approved',
       'status.admin': 'Acknowledged',
       'status.ceo': 'Approved',
     };
     const unpaidLeavesRecords = await Leave.find(unpaidLeavesQuery);
     const unpaidLeavesTaken = unpaidLeavesRecords.reduce((total, leave) => {
-      if (leave.halfDay && leave.halfDay.date) {
+      // Original: Checked halfDay.date
+      // if (leave.halfDay && leave.halfDay.date) {
+      //   return total + 0.5;
+      // }
+      if (leave.fullDay.fromDuration === 'half' && leave.fullDay.from === leave.fullDay.to) {
         return total + 0.5;
       }
       if (leave.fullDay && leave.fullDay.from && leave.fullDay.to) {
         const from = normalizeDate(leave.fullDay.from);
         const to = normalizeDate(leave.fullDay.to);
-        const days = ((to - from) / (1000 * 60 * 60 * 24)) + 1;
+        let days = ((to - from) / (1000 * 60 * 60 * 24)) + 1;
+        if (leave.fullDay.fromDuration === 'half') days -= 0.5;
+        if (leave.fullDay.toDuration === 'half') days -= 0.5;
         return total + days;
       }
       return total;

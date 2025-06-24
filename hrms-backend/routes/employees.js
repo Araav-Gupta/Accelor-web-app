@@ -191,8 +191,12 @@ router.get('/department', auth, role(['HOD', 'Employee']), async (req, res) => {
         return res.status(400).json({ message: 'End date must be after start date' });
       }
 
+      const startDateOnly = new Date(parsedStart.setHours(0, 0, 0, 0));
+      const endDateOnly = new Date(parsedEnd.setHours(0, 0, 0, 0));
+
       const overlappingLeaves = await Leave.find({
         $or: [
+          // Full-day or multi-day leaves
           {
             'fullDay.from': { $lte: parsedEnd },
             'fullDay.to': { $gte: parsedStart },
@@ -200,17 +204,31 @@ router.get('/department', auth, role(['HOD', 'Employee']), async (req, res) => {
               { 'status.hod': { $in: ['Pending', 'Approved'] } },
               { 'status.ceo': { $in: ['Pending', 'Approved'] } },
               { 'status.admin': { $in: ['Pending', 'Acknowledged'] } }
-            ]
+            ],
+            $or: [
+              { 'fullDay.fromDuration': 'full' },
+              { 'fullDay.fromDuration': 'half', 'fullDay.fromSession': { $in: ['forenoon', 'afternoon'] } }
+            ],
+            ...(parsedStart.toISOString().split('T')[0] !== parsedEnd.toISOString().split('T')[0] && {
+              $or: [
+                { 'fullDay.toDuration': 'full' },
+                { 'fullDay.toDuration': 'half', 'fullDay.toSession': 'forenoon' }
+              ]
+            })
           },
+          // Half-day leaves (same day)
           {
-            'halfDay.date': { $gte: parsedStart, $lte: parsedEnd },
+            'fullDay.from': { $gte: startDateOnly, $lte: endDateOnly },
+            'fullDay.to': { $gte: startDateOnly, $lte: endDateOnly },
+            'fullDay.fromDuration': 'half',
+            'fullDay.fromSession': { $in: ['forenoon', 'afternoon'] },
             $and: [
               { 'status.hod': { $in: ['Pending', 'Approved'] } },
               { 'status.ceo': { $in: ['Pending', 'Approved'] } },
               { 'status.admin': { $in: ['Pending', 'Acknowledged'] } }
             ]
-          },
-        ],
+          }
+        ]
       }).select('chargeGivenTo');
 
       excludedEmployeeIds = overlappingLeaves
@@ -558,10 +576,10 @@ router.put('/:id', auth, ensureGfs, ensureDbConnection, checkForFiles, async (re
     if (updates.pfNumber && !/^\d{18}$/.test(updates.pfNumber)) {
       return res.status(400).json({ message: 'PF Number must be 18 digits' });
     }
-    if (updates.uanNumber && !/^\d{12}$/.test(uanNumber)) {
+    if (updates.uanNumber && !/^\d{12}$/.test(updates.uanNumber)) {
       return res.status(400).json({ message: 'UAN Number must be 12 digits' });
     }
-    if (updates.esiNumber && !/^\d{12}$/.test(esiNumber)) {
+    if (updates.esiNumber && !/^\d{12}$/.test(updates.esiNumber)) {
       return res.status(400).json({ message: 'ESI Number must be 12 digits' });
     }
     if (updates.dateOfBirth) updates.dateOfBirth = new Date(updates.dateOfBirth);
@@ -649,7 +667,7 @@ router.put('/:id', auth, ensureGfs, ensureDbConnection, checkForFiles, async (re
 
     const updatedEmployee = await employee.save();
     const populatedEmployee = await Employee.findById(employee._id).populate('department reportingManager');
-    console.log('employee updated successfully:', updatedEmployee.employeeId);
+    console.log('Employee updated successfully:', updatedEmployee.employeeId);
 
     try {
       await Audit.create({
@@ -688,12 +706,12 @@ router.delete('/:id', auth, role(['Admin']), ensureGfs, async (req, res) => {
       await Promise.all(
         employee.documents.map(docId => {
           console.log('Deleting document:', docId);
-        try {
+          try {
             return getGfs().delete(new mongoose.Types.ObjectId(docId));
-        } catch (err) {
+          } catch (err) {
             console.warn(`Failed to delete document ${docId}: ${err.message}`);
             return null;
-        }
+          }
         })
       );
     }
@@ -954,12 +972,12 @@ router.post('/upload-excel', auth, role(['Admin']), excelUpload.single('excel'),
         } catch (err) {
           return { error: err.message, row };
         }
-        })
+      })
     );
 
     res.json({
-        success: results.filter(r => !r.error),
-        errors: results.filter(r => r.error)
+      success: results.filter(r => !r.error),
+      errors: results.filter(r => r.error)
     });
   } catch (err) {
     console.error('Error processing Excel upload:', err.message);

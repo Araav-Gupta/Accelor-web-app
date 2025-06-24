@@ -127,7 +127,7 @@ function Navbar() {
 
   useEffect(() => {
     if (!socketRef.current) {
-      socketRef.current = io("https://accelor-web-app.onrender.com", {
+      socketRef.current = io("http://localhost:5001", {
         withCredentials: true,
       });
     }

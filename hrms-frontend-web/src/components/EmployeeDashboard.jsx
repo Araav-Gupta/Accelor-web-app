@@ -183,7 +183,7 @@ function EmployeeDashboard() {
           <Card className="w-48 h-48 flex flex-col items-center justify-center bg-gradient-to-br from-purple-50 to-purple-100">
             <CardHeader className="p-2">
               <CardTitle className="text-lg font-semibold text-purple-800 text-center">
-                Unpaid Leaves Taken (Month)
+                Unpaid Leaves Taken (Current Month)
               </CardTitle>
             </CardHeader>
             <CardContent className="p-2">
