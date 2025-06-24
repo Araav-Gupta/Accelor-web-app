@@ -237,13 +237,46 @@ function LeaveList() {
   // Calculate leave duration
   const getLeaveDuration = (leave) => {
     if (leave.halfDay?.date) {
-      return "Half Day";
+      return "0.5 days";
     }
-    if (leave.fullDay?.from && leave.fullDay?.to) {
+    if (leave.fullDay?.from) {
+      const fromDuration = leave.fullDay.fromDuration || "full";
+      const fromSession = leave.fullDay.fromSession || "forenoon";
       const from = new Date(leave.fullDay.from);
+      if (!leave.fullDay.to) {
+        if (fromDuration === "full") {
+          return "1 day";
+        }
+        if (fromDuration === "half") {
+          return "0.5 days";
+        }
+      }
       const to = new Date(leave.fullDay.to);
-      const days = Math.ceil((to - from) / (1000 * 60 * 60 * 24)) + 1;
-      return `${days} Day${days > 1 ? 's' : ''}`;
+      const toDuration = leave.fullDay.toDuration || "full";
+      const toSession = leave.fullDay.toSession || "forenoon";
+      if (to < from) return "0 days";
+      if (fromDuration === "half") {
+        if (fromSession === "forenoon") {
+          return "0.5 days"; // To date disabled
+        }
+        if (fromSession === "afternoon") {
+          let days = (to - from) / (1000 * 60 * 60 * 24) + 1;
+          if (toDuration === "full") {
+            return `${days - 0.5} days`; // e.g., 1.5 for one day apart
+          }
+          if (toDuration === "half" && toSession === "forenoon") {
+            return `${days - 1} days`; // e.g., 1 for one day apart
+          }
+          return "0 days"; // Invalid combination
+        }
+      }
+      if (fromDuration === "full" && leave.fullDay.to) {
+        let days = (to - from) / (1000 * 60 * 60 * 24) + 1;
+        if (toDuration === "half") {
+          days -= 0.5;
+        }
+        return `${days} day${days === 1 ? "" : "s"}`;
+      }
     }
     return "N/A";
   };

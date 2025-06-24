@@ -39,120 +39,138 @@ router.post(
       const sevenDaysAgo = new Date(today);
       sevenDaysAgo.setDate(today.getDate() - 7);
 
-      const leaveDays = req.body.halfDay
-        ? 0.5
-        : req.body.fullDay?.from && req.body.fullDay?.to
-        ? (new Date(req.body.fullDay.to) - new Date(req.body.fullDay.from)) /
-            (1000 * 60 * 60 * 24) +
-          1
-        : 0;
-      if (leaveDays === 0 && !req.body.halfDay) {
-        return res
-          .status(400)
-          .json({ message: "Invalid leave dates provided" });
-      }
-
+      let leaveDays = 0;
       let leaveStart, leaveEnd;
-      if (req.body.halfDay?.date) {
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(req.body.halfDay.date)) {
+      if (req.body.fullDay?.from) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(req.body.fullDay.from)) {
           return res
             .status(400)
             .json({
-              message: "Invalid half day date format (expected YYYY-MM-DD)",
+              message: "Invalid full day from date format (expected YYYY-MM-DD)",
             });
         }
-        leaveStart = new Date(req.body.halfDay.date);
-        leaveEnd = new Date(req.body.halfDay.date);
+        leaveStart = new Date(req.body.fullDay.from);
         if (isNaN(leaveStart.getTime())) {
-          return res.status(400).json({ message: "Invalid half day date" });
+          return res.status(400).json({ message: "Invalid full day from date" });
         }
-        if (req.body.leaveType === "Emergency") {
-          const todayStr = today.toISOString().split("T")[0];
-          const leaveStartStr = leaveStart.toISOString().split("T")[0];
-          console.log("Emergency Half-Day Validation:", {
-            todayStr,
-            leaveStartStr,
-            rawHalfDayDate: req.body.halfDay.date,
-            serverTime: new Date().toString(),
-          });
-          if (leaveStartStr !== todayStr) {
+        const fromDuration = req.body.fullDay.fromDuration || 'full';
+        const fromSession = req.body.fullDay.fromSession;
+        if (!['full', 'half'].includes(fromDuration)) {
+          return res.status(400).json({ message: "Invalid fromDuration, must be 'full' or 'half'" });
+        }
+        if (fromDuration === 'half' && !['forenoon', 'afternoon'].includes(fromSession)) {
+          return res.status(400).json({ message: "Invalid fromSession, must be 'forenoon' or 'afternoon'" });
+        }
+        if (fromDuration === 'half' && !fromSession) {
+          return res.status(400).json({ message: "fromSession is required for half-day fromDuration" });
+        }
+        if (fromDuration === 'half') {
+          leaveDays = 0.5;
+          leaveEnd = new Date(leaveStart);
+        } else if (!req.body.fullDay?.to) {
+          leaveDays = 1;
+          leaveEnd = new Date(leaveStart);
+        } else {
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(req.body.fullDay.to)) {
             return res
               .status(400)
               .json({
-                message: "Emergency leave must be for the current date only",
+                message: "Invalid full day to date format (expected YYYY-MM-DD)",
               });
           }
-        } else if (req.body.leaveType !== "Medical" && leaveStart < today) {
+          leaveEnd = new Date(req.body.fullDay.to);
+          if (isNaN(leaveEnd.getTime())) {
+            return res.status(400).json({ message: "Invalid full day to date" });
+          }
+          const toDuration = req.body.fullDay.toDuration || 'full';
+          const toSession = req.body.fullDay.toSession;
+          if (!['full', 'half'].includes(toDuration)) {
+            return res.status(400).json({ message: "Invalid toDuration, must be 'full' or 'half'" });
+          }
+          if (toDuration === 'half' && toSession !== 'forenoon') {
+            return res.status(400).json({ message: "toSession must be 'forenoon' for half-day toDuration" });
+          }
+          if (toDuration === 'half' && !toSession) {
+            return res.status(400).json({ message: "toSession is required for half-day toDuration" });
+          }
+          if (leaveStart.toISOString().split('T')[0] === leaveEnd.toISOString().split('T')[0]) {
+            if (fromDuration === 'full' && toDuration === 'full') {
+              leaveDays = 1;
+            } else if (fromDuration === 'half' && toDuration === 'half' && fromSession === 'afternoon' && toSession === 'forenoon') {
+              leaveDays = 0.5;
+            } else {
+              return res.status(400).json({ message: "Invalid duration combination for same-day leave" });
+            }
+          } else {
+            leaveDays = (leaveEnd - leaveStart) / (1000 * 60 * 60 * 24) + 1;
+            if (fromDuration === 'half') leaveDays -= 0.5;
+            if (toDuration === 'half') leaveDays -= 0.5;
+          }
+        }
+      // Original: Handled halfDay.date
+      // } else if (req.body.halfDay?.date) {
+      //   if (!/^\d{4}-\d{2}-\d{2}$/.test(req.body.halfDay.date)) {
+      //     return res
+      //       .status(400)
+      //       .json({
+      //         message: "Invalid half day date format (expected YYYY-MM-DD)",
+      //       });
+      //   }
+      //   leaveStart = new Date(req.body.halfDay.date);
+      //   leaveEnd = new Date(req.body.halfDay.date);
+      //   if (isNaN(leaveStart.getTime())) {
+      //     return res.status(400).json({ message: "Invalid half day date" });
+      //   }
+      //   leaveDays = 0.5;
+      } else {
+        return res.status(400).json({ message: "Invalid leave dates provided" });
+      }
+
+      if (req.body.leaveType === "Medical") {
+        if (leaveStart < sevenDaysAgo || leaveStart > today) {
           return res
             .status(400)
             .json({
               message:
-                "Half day date cannot be in the past for this leave type",
+                "Medical leave from date must be within today and 7 days prior",
             });
         }
-      } else if (req.body.fullDay?.from && req.body.fullDay?.to) {
-        if (
-          !/^\d{4}-\d{2}-\d{2}$/.test(req.body.fullDay.from) ||
-          !/^\d{4}-\d{2}-\d{2}$/.test(req.body.fullDay.to)
-        ) {
+        if (!req.body.fullDay?.to) {
+          return res.status(400).json({ message: "To date is required for Medical leave" });
+        }
+      } else if (req.body.leaveType === "Emergency") {
+        const todayStr = today.toISOString().split('T')[0];
+        const leaveStartStr = leaveStart.toISOString().split('T')[0];
+        const leaveEndStr = leaveEnd ? leaveEnd.toISOString().split('T')[0] : leaveStartStr;
+        console.log("Emergency Validation:", {
+          todayStr,
+          leaveStartStr,
+          leaveEndStr,
+          rawFullDayFrom: req.body.fullDay?.from,
+          rawFullDayTo: req.body.fullDay?.to,
+          // Original: Included halfDay.date
+          // rawHalfDayDate: req.body.halfDay?.date,
+          serverTime: new Date().toString(),
+        });
+        if (leaveStartStr !== todayStr || leaveEndStr !== todayStr) {
           return res
             .status(400)
             .json({
-              message: "Invalid full day date format (expected YYYY-MM-DD)",
+              message: "Emergency leave must be for the current date only",
             });
         }
-        leaveStart = new Date(req.body.fullDay.from);
-        leaveEnd = new Date(req.body.fullDay.to);
-        if (isNaN(leaveStart.getTime()) || isNaN(leaveEnd.getTime())) {
-          return res.status(400).json({ message: "Invalid full day date" });
-        }
-        if (req.body.leaveType === "Medical") {
-          if (leaveStart < sevenDaysAgo || leaveStart > today) {
-            return res
-              .status(400)
-              .json({
-                message:
-                  "Medical leave from date must be within today and 7 days prior",
-              });
-          }
-        } else if (req.body.leaveType === "Emergency") {
-          const todayStr = today.toISOString().split("T")[0];
-          const leaveStartStr = leaveStart.toISOString().split("T")[0];
-          const leaveEndStr = leaveEnd.toISOString().split("T")[0];
-          console.log("Emergency Full-Day Validation:", {
-            todayStr,
-            leaveStartStr,
-            leaveEndStr,
-            rawFullDayFrom: req.body.fullDay.from,
-            rawFullDayTo: req.body.fullDay.to,
-            serverTime: new Date().toString(),
-          });
-          if (leaveStartStr !== todayStr || leaveEndStr !== todayStr) {
-            return res
-              .status(400)
-              .json({
-                message: "Emergency leave must be for the current date only",
-              });
-          }
-        } else {
-          if (leaveStart <= today) {
-            return res
-              .status(400)
-              .json({
-                message:
-                  "Full day from date must be after today for this leave type",
-              });
-          }
-        }
-        if (leaveStart > leaveEnd) {
-          return res
-            .status(400)
-            .json({ message: "Leave start date cannot be after end date" });
-        }
-      } else {
+      } else if (req.body.fullDay?.from && leaveStart <= today) {
         return res
           .status(400)
-          .json({ message: "Either halfDay or fullDay dates are required" });
+          .json({
+            message:
+              "Full day from date must be after today for this leave type",
+          });
+      }
+      if (leaveStart > leaveEnd) {
+        return res
+          .status(400)
+          .json({ message: "Leave start date cannot be after end date" });
       }
 
       // Check if user is assigned as Charge Given To for any non-rejected leaves overlapping with the requested period (except for Emergency leave)
@@ -168,28 +186,42 @@ router.post(
                 { "status.ceo": { $ne: "Rejected" } },
                 { "status.admin": { $in: ["Pending", "Acknowledged"] } },
               ],
-            },
-            {
-              "halfDay.date": { $gte: leaveStart, $lte: leaveEnd },
-              $and: [
-                { "status.hod": { $ne: "Rejected" } },
-                { "status.ceo": { $ne: "Rejected" } },
-                { "status.admin": { $in: ["Pending", "Acknowledged"] } },
+              $or: [
+                { 'fullDay.fromDuration': 'full' },
+                { 'fullDay.fromDuration': 'half', 'fullDay.fromSession': { $in: ['forenoon', 'afternoon'] } }
               ],
-            },
+              ...(leaveStart.toISOString().split('T')[0] !== leaveEnd.toISOString().split('T')[0] && {
+                $or: [
+                  { 'fullDay.toDuration': 'full' },
+                  { 'fullDay.toDuration': 'half', 'fullDay.toSession': 'forenoon' }
+                ]
+              })
+            }
+            // Original: Included halfDay.date
+            // {
+            //   "halfDay.date": { $gte: leaveStart, $lte: leaveEnd },
+            //   $and: [
+            //     { "status.hod": { $ne: "Rejected" } },
+            //     { "status.ceo": { $ne: "Rejected" } },
+            //     { "status.admin": { $in: ["Pending", "Acknowledged"] } },
+            //   ],
+            // }
           ],
         });
         if (overlappingChargeAssignments.length > 0) {
           const leaveDetails = overlappingChargeAssignments[0];
-          const dateRangeStr = leaveDetails.halfDay?.date
-            ? `on ${
-                new Date(leaveDetails.halfDay.date).toISOString().split("T")[0]
-              }`
-            : `from ${
-                new Date(leaveDetails.fullDay.from).toISOString().split("T")[0]
-              } to ${
-                new Date(leaveDetails.fullDay.to).toISOString().split("T")[0]
-              }`;
+          const dateRangeStr =
+            // Original: Handled halfDay.date
+            // leaveDetails.halfDay?.date
+            // ? `on ${
+            //     new Date(leaveDetails.halfDay.date).toISOString().split("T")[0]
+            //   } (${leaveDetails.halfDay.session})`
+            // :
+            `from ${
+              new Date(leaveDetails.fullDay.from).toISOString().split("T")[0]
+            }${leaveDetails.fullDay.fromDuration === 'half' ? ` (${leaveDetails.fullDay.fromSession})` : ''}${leaveDetails.fullDay.to ? ` to ${
+              new Date(leaveDetails.fullDay.to).toISOString().split("T")[0]
+            }${leaveDetails.fullDay.toDuration === 'half' ? ` (${leaveDetails.fullDay.toSession})` : ''}` : ''}`;
           return res.status(400).json({
             message: `You are assigned as Charge Given To for a leave ${dateRangeStr} and cannot apply for non-Emergency leaves during this period.`,
           });
@@ -234,22 +266,31 @@ router.post(
           {
             "fullDay.from": { $lte: leaveEnd },
             "fullDay.to": { $gte: leaveStart },
-            // Only include leaves that are not rejected at any stage
             $and: [
               { "status.hod": { $in: ["Pending", "Approved"] } },
               { "status.ceo": { $in: ["Pending", "Approved"] } },
               { "status.admin": { $in: ["Pending", "Acknowledged"] } },
             ],
-          },
-          {
-            "halfDay.date": { $gte: leaveStart, $lte: leaveEnd },
-            // Only include leaves that are not rejected at any stage
-            $and: [
-              { "status.hod": { $in: ["Pending", "Approved"] } },
-              { "status.ceo": { $in: ["Pending", "Approved"] } },
-              { "status.admin": { $in: ["Pending", "Acknowledged"] } },
+            $or: [
+              { 'fullDay.fromDuration': 'full' },
+              { 'fullDay.fromDuration': 'half', 'fullDay.fromSession': { $in: ['forenoon', 'afternoon'] } }
             ],
-          },
+            ...(leaveStart.toISOString().split('T')[0] !== leaveEnd.toISOString().split('T')[0] && {
+              $or: [
+                { 'fullDay.toDuration': 'full' },
+                { 'fullDay.toDuration': 'half', 'fullDay.toSession': 'forenoon' }
+              ]
+            })
+          }
+          // Original: Included halfDay.date
+          // {
+          //   "halfDay.date": { $gte: leaveStart, $lte: leaveEnd },
+          //   $and: [
+          //     { "status.hod": { $in: ["Pending", "Approved"] } },
+          //     { "status.ceo": { $in: ["Pending", "Approved"] } },
+          //     { "status.admin": { $in: ["Pending", "Acknowledged"] } },
+          //   ],
+          // }
         ],
       });
       if (overlappingLeaves.length > 0) {
@@ -302,10 +343,12 @@ router.post(
             employeeId: user.employeeId,
             leaveType: "Medical",
             "status.admin": "Acknowledged",
-            $or: [
-              { "fullDay.from": { $gte: new Date(currentYear, 0, 1) } },
-              { "halfDay.date": { $gte: new Date(currentYear, 0, 1) } },
-            ],
+            'fullDay.from': { $gte: new Date(currentYear, 0, 1) }
+            // Original: Included halfDay.date
+            // $or: [
+            //   { "fullDay.from": { $gte: new Date(currentYear, 0, 1) } },
+            //   { "halfDay.date": { $gte: new Date(currentYear, 0, 1) } },
+            // ]
           });
           if (medicalLeavesThisYear.length > 0) {
             return res
@@ -392,10 +435,12 @@ router.post(
           const existingRestrictedLeave = await Leave.findOne({
             employeeId: user.employeeId,
             leaveType: "Restricted Holidays",
-            $or: [
-              { "fullDay.from": { $gte: new Date(currentYear, 0, 1) } },
-              { "halfDay.date": { $gte: new Date(currentYear, 0, 1) } },
-            ],
+            'fullDay.from': { $gte: new Date(currentYear, 0, 1) },
+            // Original: Included halfDay.date
+            // $or: [
+            //   { "fullDay.from": { $gte: new Date(currentYear, 0, 1) } },
+            //   { "halfDay.date": { $gte: new Date(currentYear, 0, 1) } },
+            // ],
             $or: [
               { "status.hod": { $in: ["Pending", "Approved"] } },
               { "status.ceo": { $in: ["Pending", "Approved"] } },
@@ -492,13 +537,10 @@ router.post(
       }
 
       const status = {
-        hod: req.user.role === "Employee" ? "Pending" : "Approved",
+        hod: req.user.role === "Employee" ? "Pending" : req.user.role === "HOD" ? "Submitted" : "Approved",
         ceo: "Pending",
         admin: "Pending",
       };
-      if (req.user.role === "HOD" || req.user.role === "Admin") {
-        status.hod = "Approved";
-      }
 
       const leave = new Leave({
         employeeId: user.employeeId,
@@ -507,8 +549,18 @@ router.post(
         designation: user.designation,
         department: user.department,
         leaveType: req.body.leaveType,
-        halfDay: req.body.halfDay,
-        fullDay: req.body.fullDay,
+        // Original: Assigned halfDay
+        // halfDay: req.body.halfDay,
+        fullDay: {
+          from: req.body.fullDay?.from,
+          to: req.body.fullDay?.to || req.body.fullDay?.from,
+          // Original: Used halfDay.date for to
+          // to: req.body.fullDay?.to || req.body.fullDay?.from || req.body.halfDay?.date,
+          fromDuration: req.body.fullDay?.fromDuration || 'full',
+          fromSession: req.body.fullDay?.fromSession,
+          toDuration: req.body.fullDay?.toDuration || 'full',
+          toSession: req.body.fullDay?.toSession,
+        },
         reason: req.body.reason,
         chargeGivenTo: req.body.chargeGivenTo,
         emergencyContact: req.body.emergencyContact,
@@ -522,9 +574,12 @@ router.post(
       await leave.save();
 
       // Notify the chargeGivenTo employee
-      const dateRangeStr = req.body.halfDay?.date
-        ? `on ${req.body.halfDay.date} (${req.body.halfDay.session})`
-        : `from ${req.body.fullDay.from} to ${req.body.fullDay.to}`;
+      const dateRangeStr =
+        // Original: Handled halfDay.date
+        // req.body.halfDay?.date
+        // ? `on ${req.body.halfDay.date} (${req.body.halfDay.session})`
+        // :
+        `from ${req.body.fullDay.from}${req.body.fullDay.fromDuration === 'half' ? ` (${req.body.fullDay.fromSession})` : ''}${req.body.fullDay.to ? ` to ${req.body.fullDay.to}${req.body.fullDay.toDuration === 'half' ? ` (${req.body.fullDay.toSession})` : ''}` : ''}`;
       await Notification.create({
         userId: chargeGivenToEmployee.employeeId,
         message: `You have been assigned as Charge Given To for ${user.name}'s leave ${dateRangeStr}. You cannot apply for non-Emergency leaves during this period until the leave is rejected.`,
@@ -646,26 +701,30 @@ router.get("/", auth, async (req, res) => {
     if (fromDate) {
       const startDate = new Date(fromDate);
       startDate.setHours(0, 0, 0, 0);
-      query.$or = [
-        { "fullDay.from": { $gte: startDate } },
-        { "halfDay.date": { $gte: startDate } },
-      ];
+      query['fullDay.from'] = { $gte: startDate };
+      // Original: Included halfDay.date
+      // query.$or = [
+      //   { "fullDay.from": { $gte: startDate } },
+      //   { "halfDay.date": { $gte: startDate } },
+      // ];
     }
 
     if (toDate) {
       const endDate = new Date(toDate);
       endDate.setHours(23, 59, 59, 999);
-      query.$or = query.$or || [];
-      query.$or.push(
-        { "fullDay.to": { $lte: endDate } },
-        { "halfDay.date": { $lte: endDate } }
-      );
+      query['fullDay.to'] = { $lte: endDate };
+      // Original: Included halfDay.date
+      // query.$or = query.$or.value || [];
+      // query.$or.push(
+      //   { "fullDay.to": { $lte: endDate } },
+      //   { "halfDay.date": { $lte: endDate } },
+      // );
     }
 
     const total = await Leave.countDocuments(query);
     const leaves = await Leave.find(query)
       .populate("department", "name")
-      .populate("chargeGivenTo", "name") // Populate chargeGivenTo
+      .populate("chargeGivenTo", "name")
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(parseInt(limit));
@@ -693,7 +752,7 @@ router.get("/", auth, async (req, res) => {
           }
         }
         return {
-          ...leave.toObject(), // Convert Mongoose document to plain object
+          ...leave.toObject(),
           medicalCertificate,
         };
       })
@@ -827,20 +886,28 @@ router.put(
         switch (leave.leaveType) {
           case "Casual":
             await employee.deductPaidLeaves(
-              leave.fullDay?.from || leave.halfDay?.date,
-              leave.fullDay?.to || leave.halfDay?.date,
+              leave.fullDay.from,
+              leave.fullDay.to,
+              // Original: Used halfDay.date
+              // leave.fullDay?.from || leave.halfDay?.date,
+              // leave.fullDay?.to || leave.halfDay?.date,
               leave.leaveType
             );
             break;
           case "Medical":
             await employee.deductMedicalLeaves(
               leave,
-              leave.halfDay
+              // Original: Used halfDay
+              // leave.halfDay
+              //   ? 0.5
+              leave.fullDay.fromDuration === 'half' && leave.fullDay.from === leave.fullDay.to
                 ? 0.5
                 : leave.fullDay?.from && leave.fullDay?.to
                 ? (new Date(leave.fullDay.to) - new Date(leave.fullDay.from)) /
                     (1000 * 60 * 60 * 24) +
-                  1
+                  1 -
+                  (leave.fullDay.fromDuration === 'half' ? 0.5 : 0) -
+                  (leave.fullDay.toDuration === 'half' ? 0.5 : 0)
                 : 0
             );
             break;
@@ -863,31 +930,46 @@ router.put(
             await employee.deductCompensatoryLeaves(leave.compensatoryEntryId);
             break;
           case "Emergency":
-            const leaveDays = leave.halfDay
-              ? 0.5
-              : leave.fullDay?.from && leave.fullDay?.to
-              ? (new Date(leave.fullDay.to) - new Date(leave.fullDay.from)) /
-                  (1000 * 60 * 60 * 24) +
-                1
-              : 0;
+            const leaveDays =
+              // Original: Used halfDay
+              // leave.halfDay
+              // ? 0.5
+              leave.fullDay.fromDuration === 'half' && leave.fullDay.from === leave.fullDay.to
+                ? 0.5
+                : leave.fullDay?.from && leave.fullDay?.to
+                ? (new Date(leave.fullDay.to) - new Date(leave.fullDay.from)) /
+                    (1000 * 60 * 60 * 24) +
+                  1 -
+                  (leave.fullDay.fromDuration === 'half' ? 0.5 : 0) -
+                  (leave.fullDay.toDuration === 'half' ? 0.5 : 0)
+                : 1;
             if (employee.paidLeaves >= leaveDays) {
               await employee.deductPaidLeaves(
-                leave.fullDay?.from || leave.halfDay?.date,
-                leave.fullDay?.to || leave.halfDay?.date,
+                leave.fullDay.from,
+                leave.fullDay.to,
+                // Original: Used halfDay.date
+                // leave.fullDay?.from || leave.halfDay?.date,
+                // leave.fullDay?.to || leave.halfDay?.date,
                 leave.leaveType
               );
             } else {
               await employee.incrementUnpaidLeaves(
-                leave.fullDay?.from || leave.halfDay?.date,
-                leave.fullDay?.to || leave.halfDay?.date,
+                leave.fullDay.from,
+                leave.fullDay.to,
+                // Original: Used halfDay.date
+                // leave.fullDay?.from || leave.halfDay?.date,
+                // leave.fullDay?.to || leave.halfDay?.date,
                 leave.leaveType
               );
             }
             break;
           case "Leave Without Pay(LWP)":
             await employee.incrementUnpaidLeaves(
-              leave.fullDay?.from || leave.halfDay?.date,
-              leave.fullDay?.to || leave.halfDay?.date,
+              leave.fullDay.from,
+              leave.fullDay.to,
+              // Original: Used halfDay.date
+              // leave.fullDay?.from || leave.halfDay?.date,
+              // leave.fullDay?.to || leave.halfDay?.date,
               leave.leaveType
             );
             break;
@@ -920,13 +1002,16 @@ router.put(
 
         // Notify the chargeGivenTo employee that they are no longer assigned
         if (leave.chargeGivenTo) {
-          const dateRangeStr = leave.halfDay?.date
-            ? `on ${
-                new Date(leave.halfDay.date).toISOString().split("T")[0]
-              } (${leave.halfDay.session})`
-            : `from ${
+          const dateRangeStr =
+            // Original: Handled halfDay.date
+            // leave.halfDay.date
+            // ? `on ${
+            //     new Date(leave.halfDay.date).toISOString().split("T")[0]
+            //   } (${leave.halfDay.session})`
+            // :
+            `from ${
                 new Date(leave.fullDay.from).toISOString().split("T")[0]
-              } to ${new Date(leave.fullDay.to).toISOString().split("T")[0]}`;
+              }${leave.fullDay.fromDuration === 'half' ? ` (${leave.fullDay.fromSession})` : ''}${leave.fullDay.to ? ` to ${new Date(leave.fullDay.to).toISOString().split("T")[0]}${leave.fullDay.toDuration === 'half' ? ` (${leave.fullDay.toSession})` : ''}` : ''}`;
           await Notification.create({
             userId: leave.chargeGivenTo.employeeId,
             message: `You are no longer assigned as Charge Given To for ${
@@ -937,7 +1022,7 @@ router.put(
             global._io.to(leave.chargeGivenTo.employeeId).emit("notification", {
               message: `You are no longer assigned as Charge Given To for ${
                 leave.name
-              }'s leave ${dateRangeStr} due to rejection by ${currentStage.toUpperCase()}. You can now apply for non-Emergency leaves during this period.`,
+              }'s leave ${dateRangeStr} due to rejection by ${currentStage.toUpperCase()}. You can now apply for non-Emergency leaves.`,
             });
           }
         }
