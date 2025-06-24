@@ -20,63 +20,35 @@ const allowedOrigins = [
   'http://192.168.1.21:5001',
   'http://localhost:5174',
   'http://localhost:3000',
-  'http://192.168.59.225:5001'
+  'http://192.168.59.225:5001',
 ];
 
-app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-    return callback(new Error('Not allowed by CORS'));
-  },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,
-}));
-// app.use(cors());
+// app.use(cors({
+//   origin: (origin, callback) => {
+//     if (!origin || allowedOrigins.includes(origin)) {
+//       return callback(null, true);
+//     }
+//     return callback(new Error('Not allowed by CORS'));
+//   },
+//   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+//   allowedHeaders: ['Content-Type', 'Authorization'],
+//   credentials: true,
+// }));
+app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 const io = new Server(server, {
   cors: {
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.some(allowed => origin.startsWith(allowed))) {
+      if (!origin || allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
       return callback(new Error('Not allowed by CORS'));
     },
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    methods: ['GET', 'POST'],
     credentials: true,
   },
-  path: '/socket.io',
-  transports: ['websocket', 'polling'],
-  pingTimeout: 60000,
-  pingInterval: 25000
-});
-
-// Handle default namespace connections
-io.on('connection', (socket) => {
-  console.log('A user connected:', socket.id);
-  
-  // Join a room based on employeeId if provided
-  socket.on('join', (employeeId) => {
-    if (employeeId) {
-      socket.join(`employee_${employeeId}`);
-      console.log(`User ${socket.id} joined employee_${employeeId}`);
-    }
-  });
-
-  // Handle disconnection
-  socket.on('disconnect', () => {
-    console.log('User disconnected:', socket.id);
-  });
-
-  // Error handling
-  socket.on('error', (error) => {
-    console.error('Socket error:', error);
-  });
 });
 
 global._io = io;

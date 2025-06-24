@@ -29,20 +29,8 @@ const leaveSchema = new mongoose.Schema({
   },
 
   fullDay: {
-    type: Boolean,
-    default: true
-  },
-
-  fromDate: {
-    type: Date,
-    duration: { type: String, enum: ['Full Day', 'Half Day'] },
-    required: true
-  },
-
-  toDate: {
-    type: Date,
-    duration: { type: String, enum: ['Full Day', 'Half Day'] },
-    required: true
+    from: { type: Date },
+    to: { type: Date }
   },
 
   reason: { type: String, required: true },
