@@ -1,26 +1,30 @@
 // components/BasicInfoSection.jsx
-import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView, Modal, TouchableWithoutFeedback } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView, Modal, TouchableWithoutFeedback,ActivityIndicator,Image } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import * as FileSystem from 'expo-file-system';
+import { fetchFileAsBlob } from '../services/api';
+
+
 
 const formatDate = (dateInput) => {
     if (!dateInput) return '';
-  
+
     // If already in YYYY-MM-DD format, return as is
     if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
-      return dateInput;
+        return dateInput;
     }
-  
+
     // Create Date object from input
     const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
-  
+
     // Return empty string if date is invalid
     if (isNaN(date.getTime())) return '';
-  
+
     // Format to YYYY-MM-DD using Intl.DateTimeFormat for reliability
     return date.toISOString().split('T')[0];
-  };
+};
 
 const BasicInfoSection = ({ profile, errors, onChange, onImagePick, isLocked }) => {
     const [showDatePicker, setShowDatePicker] = useState(false);
@@ -28,26 +32,27 @@ const BasicInfoSection = ({ profile, errors, onChange, onImagePick, isLocked }) 
     const [showBloodGroupPicker, setShowBloodGroupPicker] = useState(false);
     const [showMaritalStatusPicker, setShowMaritalStatusPicker] = useState(false);
     const [showEmploymentStatusPicker, setShowEmploymentStatusPicker] = useState(false);
-    
+    const [profileUri, setProfileUri] = useState(null);
+    const [profileLoading, setProfileLoading] = useState(false);
     const genderOptions = [
         { label: 'Select Gender', value: '' },
         { label: 'Male', value: 'Male' },
         { label: 'Female', value: 'Female' },
         { label: 'Other', value: 'Other' },
     ];
-    
+
     const selectedGender = genderOptions.find(opt => opt.value === profile.gender) || genderOptions[0];
-    
+
     const bloodGroups = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
     const selectedBloodGroup = profile.bloodGroup ? profile.bloodGroup : 'Select Blood Group';
-    
+
     const maritalStatusOptions = [
         { label: 'Select', value: '' },
         { label: 'Single', value: 'Single' },
         { label: 'Married', value: 'Married' },
     ];
     const selectedMaritalStatus = maritalStatusOptions.find(opt => opt.value === profile.maritalStatus) || maritalStatusOptions[0];
-    
+
     const employmentStatusOptions = [
         { label: 'Select Status', value: '' },
         { label: 'Working', value: 'Working' },
@@ -68,7 +73,39 @@ const BasicInfoSection = ({ profile, errors, onChange, onImagePick, isLocked }) 
         { label: 'Emergency Contact Number', name: 'emergencyContactNumber', keyboardType: 'phone-pad' },
         { label: 'Employee ID', name: 'employeeId', keyboardType: 'default' }, // Added
         { label: 'User ID', name: 'userId', keyboardType: 'default' }, // Added
-    ];
+    ]
+        useEffect(() => {
+            const loadProfilePicture = async () => {
+                if (!profile?.profilePicture) return;
+                setProfileLoading(true);
+
+                try {
+                    const cacheDir = `${FileSystem.cacheDirectory}downloaded_files/`;
+                    const extension = 'jpg'; // or png if you're using that
+                    const filePath = `${cacheDir}${profile.profilePicture}.${extension}`;
+                    const fileInfo = await FileSystem.getInfoAsync(filePath);
+
+                    const isCacheValid = fileInfo.exists &&
+                        Date.now() - fileInfo.modificationTime * 1000 < 24 * 60 * 60 * 1000 &&
+                        fileInfo.size > 0;
+
+                    if (isCacheValid) {
+                        console.log('Using cached profile picture');
+                        setProfileUri(filePath);
+                    } else {
+                        console.log('Downloading new profile picture');
+                        const path = await fetchFileAsBlob(profile.profilePicture, `profile.${extension}`);
+                        setProfileUri(path);
+                    }
+                } catch (err) {
+                    console.error('Failed to load profile picture:', err.message);
+                } finally {
+                    setProfileLoading(false);
+                }
+            };
+
+            loadProfilePicture();
+        }, [profile?.profilePicture]);
 
     return (
         <View style={styles.container}>
@@ -82,13 +119,21 @@ const BasicInfoSection = ({ profile, errors, onChange, onImagePick, isLocked }) 
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Basic Information</Text>
 
-                    <TouchableOpacity onPress={onImagePick} disabled={isLocked} style={styles.imagePicker}>
-                        {profile.profilePicture ? (
-                            <MaterialIcons name="person" size={50} color="#666" />
-                        ) : (
-                            <MaterialIcons name="add-a-photo" size={50} color="#aaa" />
-                        )}
-                    </TouchableOpacity>
+                    {profile?.profilePicture ? (
+                        <View style={styles.profileContainer}>
+                            {profileLoading ? (
+                                <ActivityIndicator size="small" color="#0000ff" />
+                            ) : profileUri ? (
+                                <Image source={{ uri: profileUri }} style={styles.profileImage} onError={(e) => console.log('Error loading image:', e.nativeEvent.error)} />
+                            ) : (
+                                <MaterialIcons name="person" size={50} color="#666666" style={styles.defaultIcon} />
+                            )}
+                        </View>
+                    ) : (
+                        <View style={styles.profileContainer}>
+                        <MaterialIcons name="person" size={50} color="#666666" style={styles.defaultIcon} />
+                        </View>
+                    )}
 
                     {fields.map((field) => (
                         <View key={field.name} style={styles.inputGroup}>
@@ -133,7 +178,7 @@ const BasicInfoSection = ({ profile, errors, onChange, onImagePick, isLocked }) 
 
                     <View style={styles.inputGroup}>
                         <Text style={styles.label}>Gender</Text>
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             style={[styles.dropdownContainer, errors.gender && styles.inputError]}
                             onPress={() => !isLocked && setShowGenderPicker(true)}
                             disabled={isLocked}
@@ -144,7 +189,7 @@ const BasicInfoSection = ({ profile, errors, onChange, onImagePick, isLocked }) 
                             <MaterialIcons name="arrow-drop-down" size={24} color="#666" />
                         </TouchableOpacity>
                         {errors.gender && <Text style={styles.errorText}>{errors.gender}</Text>}
-                        
+
                         <Modal
                             visible={showGenderPicker}
                             transparent={true}
@@ -181,7 +226,7 @@ const BasicInfoSection = ({ profile, errors, onChange, onImagePick, isLocked }) 
 
                     <View style={styles.inputGroup}>
                         <Text style={styles.label}>Blood Group</Text>
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             style={[styles.dropdownContainer, errors.bloodGroup && styles.inputError]}
                             onPress={() => !isLocked && setShowBloodGroupPicker(true)}
                             disabled={isLocked}
@@ -192,7 +237,7 @@ const BasicInfoSection = ({ profile, errors, onChange, onImagePick, isLocked }) 
                             <MaterialIcons name="arrow-drop-down" size={24} color="#666" />
                         </TouchableOpacity>
                         {errors.bloodGroup && <Text style={styles.errorText}>{errors.bloodGroup}</Text>}
-                        
+
                         <Modal
                             visible={showBloodGroupPicker}
                             transparent={true}
@@ -229,7 +274,7 @@ const BasicInfoSection = ({ profile, errors, onChange, onImagePick, isLocked }) 
 
                     <View style={styles.inputGroup}>
                         <Text style={styles.label}>Marital Status</Text>
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             style={[styles.dropdownContainer, errors.maritalStatus && styles.inputError]}
                             onPress={() => !isLocked && setShowMaritalStatusPicker(true)}
                             disabled={isLocked}
@@ -240,7 +285,7 @@ const BasicInfoSection = ({ profile, errors, onChange, onImagePick, isLocked }) 
                             <MaterialIcons name="arrow-drop-down" size={24} color="#666" />
                         </TouchableOpacity>
                         {errors.maritalStatus && <Text style={styles.errorText}>{errors.maritalStatus}</Text>}
-                        
+
                         <Modal
                             visible={showMaritalStatusPicker}
                             transparent={true}
@@ -277,7 +322,7 @@ const BasicInfoSection = ({ profile, errors, onChange, onImagePick, isLocked }) 
 
                     <View style={styles.inputGroup}>
                         <Text style={styles.label}>Employment Status</Text>
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             style={[styles.dropdownContainer, errors.employmentStatus && styles.inputError]}
                             onPress={() => !isLocked && setShowEmploymentStatusPicker(true)}
                             disabled={isLocked}
@@ -288,7 +333,7 @@ const BasicInfoSection = ({ profile, errors, onChange, onImagePick, isLocked }) 
                             <MaterialIcons name="arrow-drop-down" size={24} color="#666" />
                         </TouchableOpacity>
                         {errors.employmentStatus && <Text style={styles.errorText}>{errors.employmentStatus}</Text>}
-                        
+
                         <Modal
                             visible={showEmploymentStatusPicker}
                             transparent={true}
@@ -357,6 +402,30 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: '#fff',
     },
+    profileContainer: {
+        alignItems: 'center',
+        marginBottom: -20,
+        marginTop: -10,
+    },
+    profileImage: {
+        width: 80,
+        height: 80,
+        borderRadius: 60,
+        marginBottom: 20,
+        marginRight: 20,
+    
+        marginLeft: 10,
+        marginTop: 20,
+        flex: 1,
+      },
+      defaultIcon: {
+        width: 50,
+        height: 50,
+        borderRadius: 50,
+        backgroundColor: '#f8fafc',
+        justifyContent: 'center',
+    
+      },
     scrollContent: {
         padding: 16,
         paddingBottom: 100, // Extra space for the save button
