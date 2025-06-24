@@ -4,6 +4,24 @@ import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView, Modal,
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
+const formatDate = (dateInput) => {
+    if (!dateInput) return '';
+  
+    // If already in YYYY-MM-DD format, return as is
+    if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
+      return dateInput;
+    }
+  
+    // Create Date object from input
+    const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  
+    // Return empty string if date is invalid
+    if (isNaN(date.getTime())) return '';
+  
+    // Format to YYYY-MM-DD using Intl.DateTimeFormat for reliability
+    return date.toISOString().split('T')[0];
+  };
+
 const BasicInfoSection = ({ profile, errors, onChange, onImagePick, isLocked }) => {
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [showGenderPicker, setShowGenderPicker] = useState(false);
@@ -94,7 +112,7 @@ const BasicInfoSection = ({ profile, errors, onChange, onImagePick, isLocked }) 
                             style={[styles.input, styles.dateInput, errors.dateOfBirth && styles.inputError]}
                         >
                             <Text style={{ color: profile.dateOfBirth ? '#000' : '#aaa' }}>
-                                {profile.dateOfBirth || 'Select date of birth'}
+                                {profile.dateOfBirth ? formatDate(profile.dateOfBirth) : 'Select date of birth'}
                             </Text>
                         </TouchableOpacity>
                         {showDatePicker && (
@@ -309,7 +327,7 @@ const BasicInfoSection = ({ profile, errors, onChange, onImagePick, isLocked }) 
                         <Text style={styles.label}>Date of Joining</Text>
                         <TextInput
                             style={[styles.input, errors.dateOfJoining && styles.inputError]}
-                            value={profile.dateOfJoining}
+                            value={formatDate(profile.dateOfJoining)}
                             onChangeText={(text) => onChange('dateOfJoining', text)}
                             editable={!isLocked}
                             placeholder="YYYY-MM-DD"

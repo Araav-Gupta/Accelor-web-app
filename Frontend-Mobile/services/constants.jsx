@@ -13,4 +13,4 @@ export const LEAVE_TYPES = [
   
   export const RESTRICTED_HOLIDAYS = ['Diwali', 'Christmas', 'Eid'];
 
-  export const eligibleDepartments = ['Production', 'Testing', 'AMETL', 'Admin'];
+  export const eligibleDepartments = ['Production', 'AMETL', 'Mechanical'];

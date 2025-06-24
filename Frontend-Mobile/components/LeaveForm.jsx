@@ -425,7 +425,7 @@ const LeaveForm = ({ navigation }) => {
       hasReason: !!form.reason,
       hasChargeTo: !!form.chargeTo
     });
-
+    console.log('User:', user);
     const validationError = validateLeaveForm(
       form,
       user,
@@ -897,7 +897,7 @@ const LeaveForm = ({ navigation }) => {
                                 }}
                               >
                                 <Text style={styles.dropdownItemText}>
-                                  {emp.name} ({emp.personId || 'N/A'})
+                                  {emp.name}
                                 </Text>
                               </TouchableOpacity>
                             );
@@ -919,8 +919,8 @@ const LeaveForm = ({ navigation }) => {
                 style={styles.input}
                 value={form.emergencyContact}
                 onChangeText={(text) => handleChange('emergencyContact', text)}
-                placeholder="Enter contact number"
-                keyboardType="phone-pad"
+                placeholder="Enter contact Address, Number"
+                keyboardType="default"
               />
             </View>
 
@@ -943,26 +943,6 @@ const LeaveForm = ({ navigation }) => {
               </View>
             )}
 
-            <View style={styles.formGroup}>
-              <Text style={styles.labelText}>Supporting Documents</Text>
-              <TouchableOpacity style={styles.uploadButton} onPress={() => pickDocument('supporting')}>
-                <Text style={{ color: '#666', fontSize: 16 }}>
-                  {form.supportingDocuments.length > 0 ? 'Add More Supporting Documents' : 'Upload Supporting Documents'}
-                </Text>
-              </TouchableOpacity>
-              {form.supportingDocuments.length > 0 && (
-                <View>
-                  {form.supportingDocuments.map((doc, index) => (
-                    <View key={index} style={styles.fileInfo}>
-                      <Text style={styles.fileName}>{doc.name}</Text>
-                      <TouchableOpacity onPress={() => removeDocument(index, 'supporting')}>
-                        <Text style={{ color: '#666' }}>Remove</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-                </View>
-              )}
-            </View>
 
             <TouchableOpacity
               style={[styles.submitButton, submitting && styles.submitButtonDisabled]}

@@ -57,9 +57,9 @@ const NotificationBell = () => {
             {notifications.length === 0 ? (
               <Text style={styles.emptyText}>No notifications</Text>
             ) : (
-              notifications.map((notification) => (
+              notifications.map((notification, index) => (
                 <TouchableOpacity
-                  key={notification._id}
+                  key={`${notification._id || 'notification'}-${index}`}
                   style={[
                     styles.notificationItem,
                     !notification.read && styles.unreadNotification

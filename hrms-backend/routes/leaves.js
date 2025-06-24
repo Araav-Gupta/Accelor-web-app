@@ -139,7 +139,10 @@ router.post('/', auth, role(['Employee', 'HOD', 'Admin']), upload.single('medica
     }
 
     const leaveType = req.body.leaveType;
+
     const isConfirmed = user.employeeType === 'Confirmed';
+    console.log('employee Type:', user.employeeType);
+    console.log('isConfirmed:', isConfirmed);
     const joinDate = new Date(user.dateOfJoining);
     const yearsOfService = (new Date() - joinDate) / (1000 * 60 * 60 * 24 * 365);
 
@@ -148,6 +151,7 @@ router.post('/', auth, role(['Employee', 'HOD', 'Admin']), upload.single('medica
       if (!req.file) {
         return res.status(400).json({ message: 'Medical certificate is required for Medical leave' });
       }
+      console.log('employee Type:', user.employeeType);
       const fileData = await uploadToGridFS(req.file, { employeeId: user.employeeId, leaveType: 'Medical' });
       medicalCertificateId = fileData._id;
     }
@@ -195,6 +199,7 @@ router.post('/', auth, role(['Employee', 'HOD', 'Admin']), upload.single('medica
         }
         break;
       case 'Medical':
+        console.log('isConfirmed:', isConfirmed);
         if (!isConfirmed) return res.status(400).json({ message: 'Medical leave is only for confirmed employees.' });
         if (![3, 4].includes(leaveDays)) return res.status(400).json({ message: 'Medical leave must be either 3 or 4 days.' });
         if (user.medicalLeaves < leaveDays) return res.status(400).json({ message: 'Medical leave already used or insufficient balance for this year.' });
