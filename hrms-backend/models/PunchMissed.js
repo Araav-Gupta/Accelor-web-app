@@ -10,7 +10,7 @@ const punchMissedSchema = new mongoose.Schema({
   reason: { type: String, required: true },
   adminInput: { type: String },
   status: {
-    hod: { type: String, enum: ['Pending', 'Approved'], default: 'Pending' },
+    hod: { type: String, enum: ['Pending', 'Approved', 'Submitted'], default: 'Pending' },
     admin: { type: String, enum: ['Pending', 'Approved'], default: 'Pending' },
     ceo: { type: String, enum: ['Pending', 'Approved'], default: 'Pending' },
   },

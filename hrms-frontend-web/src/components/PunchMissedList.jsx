@@ -183,13 +183,13 @@ function PunchMissedList() {
     if (user.loginType === 'HOD' && form.status.hod === 'Pending') return true;
     if (
       user.loginType === 'Admin' &&
-      form.status.hod === 'Approved' &&
+      ["Approved", "Submitted"].includes(form.status.hod) &&
       form.status.admin === 'Pending'
     )
       return true;
     if (
       user.loginType === 'CEO' &&
-      form.status.hod === 'Approved' &&
+      ["Approved", "Submitted"].includes(form.status.hod) &&
       form.status.admin === 'Approved' &&
       form.status.ceo === 'Pending'
     )

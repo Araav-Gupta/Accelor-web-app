@@ -24,10 +24,13 @@ dotenv.config();
 function parseExcelDate(value) {
   if (!value) return undefined;
   if (typeof value === 'number') {
-    // Excel's epoch starts at 1900-01-01
-    return new Date(Math.round((value - 25569) * 86400 * 1000));
+    // Excel's epoch starts at 1900-01-01, treat as UTC
+    const date = new Date(Date.UTC(1970, 0, 1));
+    date.setUTCSeconds(Math.round((value - 25569) * 86400));
+    return date;
   }
-  return new Date(value);
+  // Parse as UTC
+  return new Date(Date.parse(value + 'Z'));
 }
 
 // Middleware to check gfs readiness
@@ -120,6 +123,9 @@ const excelUpload = multer({
 // Get document metadata for an employee
 router.get('/:id/documents', auth, ensureGfs, async (req, res) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: 'Invalid employee ID format' });
+    }
     const employee = await Employee.findById(req.params.id);
     if (!employee) {
       return res.status(404).json({ message: 'Employee not found' });
@@ -130,6 +136,10 @@ router.get('/:id/documents', auth, ensureGfs, async (req, res) => {
     }
     const documentMetadata = [];
     for (const docId of employee.documents) {
+      if (!mongoose.Types.ObjectId.isValid(docId)) {
+        console.warn(`Invalid document ID: ${docId}`);
+        continue;
+      }
       const file = await gfs.find({ _id: new mongoose.Types.ObjectId(docId) }).toArray();
       if (file[0]) {
         documentMetadata.push({
@@ -159,11 +169,14 @@ router.get('/', auth, role(['Admin', 'CEO']), async (req, res) => {
   }
 });
 
-// Get employees in the same department, excluding those assigned to overlapping leaves
+// Get employees in the same department, excluding those assigned to overlapping leaves or on leave themselves
 router.get('/department', auth, role(['HOD', 'Employee']), async (req, res) => {
   try {
     const { id, loginType } = req.user;
-    const { startDate, endDate } = req.query;
+    const { startDate, endDate, fromDuration, fromSession, toDuration, toSession } = req.query;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid user ID format' });
+    }
     const user = await Employee.findById(id).populate('department');
     if (!user?.department?._id) {
       return res.status(400).json({ message: 'User department not found' });
@@ -181,8 +194,8 @@ router.get('/department', auth, role(['HOD', 'Employee']), async (req, res) => {
 
     let excludedEmployeeIds = [];
     if (startDate && endDate) {
-      const parsedStart = new Date(startDate);
-      const parsedEnd = new Date(endDate);
+      const parsedStart = new Date(Date.parse(startDate + 'T00:00:00Z'));
+      const parsedEnd = new Date(Date.parse(endDate + 'T23:59:59.999Z'));
 
       if (isNaN(parsedStart.getTime()) || isNaN(parsedEnd.getTime())) {
         return res.status(400).json({ message: 'Invalid date format' });
@@ -191,13 +204,16 @@ router.get('/department', auth, role(['HOD', 'Employee']), async (req, res) => {
         return res.status(400).json({ message: 'End date must be after start date' });
       }
 
-      const startDateOnly = new Date(parsedStart.setHours(0, 0, 0, 0));
-      const endDateOnly = new Date(parsedEnd.setHours(0, 0, 0, 0));
+      console.log('Half-day session handling:', { fromDuration, fromSession, toDuration, toSession });
 
+      // Optimized query combining chargeGivenTo and employee leaves
       const overlappingLeaves = await Leave.find({
         $or: [
-          // Full-day or multi-day leaves
           {
+            $or: [
+              { chargeGivenTo: { $exists: true } },
+              { employee: { $exists: true } }
+            ],
             'fullDay.from': { $lte: parsedEnd },
             'fullDay.to': { $gte: parsedStart },
             $and: [
@@ -216,10 +232,13 @@ router.get('/department', auth, role(['HOD', 'Employee']), async (req, res) => {
               ]
             })
           },
-          // Half-day leaves (same day)
           {
-            'fullDay.from': { $gte: startDateOnly, $lte: endDateOnly },
-            'fullDay.to': { $gte: startDateOnly, $lte: endDateOnly },
+            $or: [
+              { chargeGivenTo: { $exists: true } },
+              { employee: { $exists: true } }
+            ],
+            'fullDay.from': { $gte: parsedStart, $lte: parsedEnd },
+            'fullDay.to': { $gte: parsedStart, $lte: parsedEnd },
             'fullDay.fromDuration': 'half',
             'fullDay.fromSession': { $in: ['forenoon', 'afternoon'] },
             $and: [
@@ -229,11 +248,21 @@ router.get('/department', auth, role(['HOD', 'Employee']), async (req, res) => {
             ]
           }
         ]
-      }).select('chargeGivenTo');
+      }).select('chargeGivenTo employee');
 
-      excludedEmployeeIds = overlappingLeaves
-        .map((leave) => leave.chargeGivenTo?.toString())
-        .filter((id) => id);
+      excludedEmployeeIds = [
+        ...overlappingLeaves
+          .map((leave) => leave.chargeGivenTo?.toString())
+          .filter((id) => id && mongoose.Types.ObjectId.isValid(id)),
+        ...overlappingLeaves
+          .map((leave) => leave.employee?.toString())
+          .filter((id) => id && mongoose.Types.ObjectId.isValid(id))
+      ];
+      excludedEmployeeIds = [...new Set(excludedEmployeeIds)];
+
+      if (excludedEmployeeIds.includes('6831b42e22d3b8e6c3ce0fc0')) {
+        console.log('Excluding employee 6831b42e22d3b8e6c3ce0fc0 due to existing leave on June 27, 2025');
+      }
     }
 
     if (excludedEmployeeIds.length > 0) {
@@ -267,11 +296,14 @@ router.get('/departments', auth, role(['Admin', 'CEO']), async (req, res) => {
 // Get single employee by ID
 router.get('/:id', auth, async (req, res) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: 'Invalid employee ID format' });
+    }
     const employee = await Employee.findById(req.params.id).populate('department reportingManager');
     if (!employee) return res.status(404).json({ message: 'Employee not found' });
     res.json(employee);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
 
@@ -295,7 +327,7 @@ router.post('/', auth, role(['Admin']), ensureGfs, ensureDbConnection, checkForF
       'motherName', 'mobileNumber', 'permanentAddress', 'currentAddress', 'aadharNumber',
       'bloodGroup', 'gender', 'maritalStatus', 'emergencyContactName', 'emergencyContactNumber',
       'dateOfJoining', 'reportingManager', 'status', 'loginType', 'designation',
-      'location', 'department', 'panNumber', 'paymentType', 'ctc', 'basic', 'inHand'
+      'location', 'department', 'panNumber', 'paymentType', 'ctc', 'basic', 'inHand' //CHECK THE ISSUE FOR PAN NUMBER
     ];
     for (const field of requiredFields) {
       if (!req.body[field] || req.body[field].toString().trim() === '') {
@@ -366,9 +398,15 @@ router.post('/', auth, role(['Admin']), ensureGfs, ensureDbConnection, checkForF
       return res.status(400).json({ message: 'In Hand must be a valid non-negative number' });
     }
 
+    if (!mongoose.Types.ObjectId.isValid(department)) {
+      return res.status(400).json({ message: 'Invalid department ID format' });
+    }
     const departmentExists = await Department.findById(department);
     if (!departmentExists) return res.status(400).json({ message: 'Invalid department' });
 
+    if (!mongoose.Types.ObjectId.isValid(reportingManager)) {
+      return res.status(400).json({ message: 'Invalid reporting manager ID format' });
+    }
     const reportingManagerExists = await Employee.findById(reportingManager);
     if (!reportingManagerExists) return res.status(400).json({ message: 'Invalid reporting manager' });
 
@@ -396,7 +434,7 @@ router.post('/', auth, role(['Admin']), ensureGfs, ensureDbConnection, checkForF
       email,
       password,
       name,
-      dateOfBirth: new Date(dateOfBirth),
+      dateOfBirth: new Date(Date.parse(dateOfBirth + 'T00:00:00Z')),
       fatherName,
       motherName,
       mobileNumber,
@@ -409,13 +447,13 @@ router.post('/', auth, role(['Admin']), ensureGfs, ensureDbConnection, checkForF
       spouseName,
       emergencyContactName,
       emergencyContactNumber,
-      dateOfJoining: new Date(dateOfJoining),
+      dateOfJoining: new Date(Date.parse(dateOfJoining + 'T00:00:00Z')),
       reportingManager,
       status,
-      dateOfResigning: status === 'Resigned' ? new Date(dateOfResigning) : null,
+      dateOfResigning: status === 'Resigned' ? new Date(Date.parse(dateOfResigning + 'T00:00:00Z')) : null,
       employeeType: status === 'Working' ? employeeType : null,
       probationPeriod: status === 'Working' && employeeType === 'Probation' ? probationPeriod : null,
-      confirmationDate: status === 'Working' && employeeType === 'Probation' ? new Date(confirmationDate) : null,
+      confirmationDate: status === 'Working' && employeeType === 'Probation' ? new Date(Date.parse(confirmationDate + 'T00:00:00Z')) : null,
       referredBy,
       loginType,
       designation,
@@ -473,6 +511,9 @@ router.put('/:id', auth, ensureGfs, ensureDbConnection, checkForFiles, async (re
   try {
     console.log('Received PUT request body:', req.body);
     console.log('Received files:', req.uploadedFiles);
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: 'Invalid employee ID format' });
+    }
     const employee = await Employee.findById(req.params.id);
     if (!employee) return res.status(404).json({ message: 'Employee not found' });
 
@@ -537,10 +578,16 @@ router.put('/:id', auth, ensureGfs, ensureDbConnection, checkForFiles, async (re
 
     // Validate updates
     if (updates.department) {
+      if (!mongoose.Types.ObjectId.isValid(updates.department)) {
+        return res.status(400).json({ message: 'Invalid department ID format' });
+      }
       const departmentExists = await Department.findById(updates.department);
       if (!departmentExists) return res.status(400).json({ message: 'Invalid department' });
     }
     if (updates.reportingManager) {
+      if (!mongoose.Types.ObjectId.isValid(updates.reportingManager)) {
+        return res.status(400).json({ message: 'Invalid reporting manager ID format' });
+      }
       const reportingManagerExists = await Employee.findById(updates.reportingManager);
       if (!reportingManagerExists) {
         return res.status(400).json({ message: 'Invalid reporting manager' });
@@ -582,10 +629,10 @@ router.put('/:id', auth, ensureGfs, ensureDbConnection, checkForFiles, async (re
     if (updates.esiNumber && !/^\d{12}$/.test(updates.esiNumber)) {
       return res.status(400).json({ message: 'ESI Number must be 12 digits' });
     }
-    if (updates.dateOfBirth) updates.dateOfBirth = new Date(updates.dateOfBirth);
-    if (updates.dateOfJoining) updates.dateOfJoining = new Date(updates.dateOfJoining);
-    if (updates.dateOfResigning) updates.dateOfResigning = new Date(updates.dateOfResigning);
-    if (updates.confirmationDate) updates.confirmationDate = new Date(updates.confirmationDate);
+    if (updates.dateOfBirth) updates.dateOfBirth = new Date(Date.parse(updates.dateOfBirth + 'T00:00:00Z'));
+    if (updates.dateOfJoining) updates.dateOfJoining = new Date(Date.parse(updates.dateOfJoining + 'T00:00:00Z'));
+    if (updates.dateOfResigning) updates.dateOfResigning = new Date(Date.parse(updates.dateOfResigning + 'T00:00:00Z'));
+    if (updates.confirmationDate) updates.confirmationDate = new Date(Date.parse(updates.confirmationDate + 'T00:00:00Z'));
     if (updates.paymentType === 'Bank Transfer' && (!updates.bankName || !updates.bankBranch || !updates.accountNumber || !updates.ifscCode)) {
       return res.status(400).json({ message: 'Bank details are required for bank transfer payment type' });
     }
@@ -605,7 +652,11 @@ router.put('/:id', auth, ensureGfs, ensureDbConnection, checkForFiles, async (re
       if (employee.profilePicture) {
         console.log('Deleting old profile picture:', employee.profilePicture);
         try {
-          await getGfs().delete(new mongoose.Types.ObjectId(employee.profilePicture));
+          if (mongoose.Types.ObjectId.isValid(employee.profilePicture)) {
+            await getGfs().delete(new mongoose.Types.ObjectId(employee.profilePicture));
+          } else {
+            console.warn(`Invalid profile picture ID: ${employee.profilePicture}`);
+          }
         } catch (err) {
           console.warn(`Failed to delete old profile picture: ${err.message}`);
         }
@@ -637,7 +688,11 @@ router.put('/:id', auth, ensureGfs, ensureDbConnection, checkForFiles, async (re
         for (const docId of employee.documents) {
           console.log('Deleting old document:', docId);
           try {
-            await getGfs().delete(new mongoose.Types.ObjectId(docId));
+            if (mongoose.Types.ObjectId.isValid(docId)) {
+              await getGfs().delete(new mongoose.Types.ObjectId(docId));
+            } else {
+              console.warn(`Invalid document ID: ${docId}`);
+            }
           } catch (err) {
             console.warn(`Failed to delete old document ${docId}: ${err.message}`);
           }
@@ -691,13 +746,20 @@ router.put('/:id', auth, ensureGfs, ensureDbConnection, checkForFiles, async (re
 // Delete employee (Admin only)
 router.delete('/:id', auth, role(['Admin']), ensureGfs, async (req, res) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: 'Invalid employee ID format' });
+    }
     const employee = await Employee.findById(req.params.id);
     if (!employee) return res.status(404).json({ message: 'Employee not found' });
 
     if (employee.profilePicture) {
       console.log('Deleting profile picture:', employee.profilePicture);
       try {
-        await getGfs().delete(new mongoose.Types.ObjectId(employee.profilePicture));
+        if (mongoose.Types.ObjectId.isValid(employee.profilePicture)) {
+          await getGfs().delete(new mongoose.Types.ObjectId(employee.profilePicture));
+        } else {
+          console.warn(`Invalid profile picture ID: ${employee.profilePicture}`);
+        }
       } catch (err) {
         console.warn(`Failed to delete profile picture: ${err.message}`);
       }
@@ -707,7 +769,12 @@ router.delete('/:id', auth, role(['Admin']), ensureGfs, async (req, res) => {
         employee.documents.map(docId => {
           console.log('Deleting document:', docId);
           try {
-            return getGfs().delete(new mongoose.Types.ObjectId(docId));
+            if (mongoose.Types.ObjectId.isValid(docId)) {
+              return getGfs().delete(new mongoose.Types.ObjectId(docId));
+            } else {
+              console.warn(`Invalid document ID: ${docId}`);
+              return null;
+            }
           } catch (err) {
             console.warn(`Failed to delete document ${docId}: ${err.message}`);
             return null;
@@ -741,13 +808,11 @@ router.delete('/:id', auth, role(['Admin']), ensureGfs, async (req, res) => {
 // Get file by ID (e.g., profile picture or document)
 router.get('/files/:fileId', auth, ensureGfs, async (req, res) => {
   try {
-    const gfs = getGfs();
-    let fileId;
-    try {
-      fileId = new mongoose.Types.ObjectId(req.params.fileId);
-    } catch (err) {
-      return res.status(400).json({ message: 'Invalid file ID' });
+    if (!mongoose.Types.ObjectId.isValid(req.params.fileId)) {
+      return res.status(400).json({ message: 'Invalid file ID format' });
     }
+    const gfs = getGfs();
+    const fileId = new mongoose.Types.ObjectId(req.params.fileId);
 
     const files = await gfs.find({ _id: fileId }).toArray();
     if (!files || files.length === 0) {
@@ -771,6 +836,9 @@ router.get('/files/:fileId', auth, ensureGfs, async (req, res) => {
 // Lock/Unlock employee (Admin only)
 router.patch('/:id/lock', auth, role(['Admin']), async (req, res) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: 'Invalid employee ID format' });
+    }
     const employee = await Employee.findById(req.params.id);
     if (!employee) return res.status(404).json({ message: 'Employee not found' });
 
@@ -805,6 +873,9 @@ router.patch('/:id/lock-section', auth, role(['Admin']), async (req, res) => {
       return res.status(400).json({ message: 'Invalid section' });
     }
 
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: 'Invalid employee ID format' });
+    }
     const employee = await Employee.findById(req.params.id);
     if (!employee) return res.status(404).json({ message: 'Employee not found' });
 
@@ -894,14 +965,24 @@ router.post('/upload-excel', auth, role(['Admin']), excelUpload.single('excel'),
           let departmentId = null;
           if (row.department) {
             const dept = await Department.findOne({ name: row.department });
-            if (dept) departmentId = dept._id;
+            if (dept) {
+              if (!mongoose.Types.ObjectId.isValid(dept._id)) {
+                throw new Error(`Invalid department ID for department: ${row.department}`);
+              }
+              departmentId = dept._id;
+            }
           }
 
             // Reporting Manager population if reportingManager is provided
           let reportingManagerId = null;
           if (row.reportingManager) {
             const manager = await Employee.findOne({ employeeId: row.reportingManager });
-            if (manager) reportingManagerId = manager._id;
+            if (manager) {
+              if (!mongoose.Types.ObjectId.isValid(manager._id)) {
+                throw new Error(`Invalid reporting manager ID for employeeId: ${row.reportingManager}`);
+              }
+              reportingManagerId = manager._id;
+            }
           }
 
             // Compose employee data (leave missing fields blank)
@@ -987,6 +1068,9 @@ router.post('/upload-excel', auth, role(['Admin']), excelUpload.single('excel'),
 
 router.get('/:id/emergency-leave-permission-existing', auth, role(['Admin', 'HOD', 'CEO']), async (req, res) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: 'Invalid employee ID format' });
+    }
     const employee = await Employee.findById(req.params.id);
     if (!employee) {
       return res.status(404).json({ message: 'Employee not found' });
@@ -997,14 +1081,21 @@ router.get('/:id/emergency-leave-permission-existing', auth, role(['Admin', 'HOD
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
+
 // Toggle Emergency Leave Permission (HOD for subordinates, CEO for HODs)
 router.patch('/:id/emergency-leave-permission', auth, role(['Admin', 'HOD', 'CEO']), async (req, res) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: 'Invalid employee ID format' });
+    }
     const employee = await Employee.findById(req.params.id);
     if (!employee) {
       return res.status(404).json({ message: 'Employee not found' });
     }
 
+    if (!mongoose.Types.ObjectId.isValid(req.user.id)) {
+      return res.status(400).json({ message: 'Invalid user ID format' });
+    }
     const user = await Employee.findById(req.user.id);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
@@ -1067,6 +1158,9 @@ router.post('/generate-letter', auth, role(['Admin']), async (req, res) => {
       return res.status(400).json({ message: 'Invalid letter type' });
     }
 
+    if (!mongoose.Types.ObjectId.isValid(employeeId)) {
+      return res.status(400).json({ message: 'Invalid employee ID format' });
+    }
     // Fetch employee
     const employee = await Employee.findById(employeeId).populate('department reportingManager');
     if (!employee) {
@@ -1094,7 +1188,7 @@ router.post('/generate-letter', auth, role(['Admin']), async (req, res) => {
       mobileNumber: employee.mobileNumber || '',
       email: employee.email || '',
       designation: employee.designation || '',
-      dateOfJoining: employee.dateOfJoining ? moment(employee.dateOfJoining).format('DD MMMM YYYY') : '',
+      dateOfJoining: employee.dateOfJoining ? moment.utc(employee.dateOfJoining).format('DD MMMM YYYY') : '',
       fatherName: employee.fatherName || '',
       aadharNumber: employee.aadharNumber || '',
       serviceAgreement: employee.serviceAgreement ? employee.serviceAgreement : '',

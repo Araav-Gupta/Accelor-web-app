@@ -63,7 +63,7 @@ router.post('/', auth, role(['Employee', 'HOD', 'Admin']), async (req, res) => {
       return res.status(400).json({ message: 'Invalid time format for Your Input' });
     }
     const status = {
-      hod: req.user.loginType === 'HOD' || req.user.loginType === 'Admin' ? 'Approved' : 'Pending',
+      hod: req.user.loginType === 'Employee' ? 'Pending' : req.user.loginType === 'HOD' ? 'Submitted' : 'Approved',
       admin: req.user.loginType === 'Admin' ? 'Approved' : 'Pending',
       ceo: 'Pending',
     };
@@ -97,7 +97,7 @@ router.post('/', auth, role(['Employee', 'HOD', 'Admin']), async (req, res) => {
           });
         }
       }
-    } else if (status.hod === 'Approved' && status.admin === 'Pending') {
+    } else if (["Approved", "Submitted"].includes(status.hod) && status.admin === 'Pending') {
       const admin = await Employee.findOne({ loginType: 'Admin' });
       if (admin) {
         await Notification.create({
@@ -110,7 +110,7 @@ router.post('/', auth, role(['Employee', 'HOD', 'Admin']), async (req, res) => {
           });
         }
       }
-    } else if (status.hod === 'Approved' && status.admin === 'Approved' && status.ceo === 'Pending') {
+    } else if (["Approved", "Submitted"].includes(status.hod) && status.admin === 'Approved' && status.ceo === 'Pending') {
       const ceo = await Employee.findOne({ loginType: 'CEO' });
       if (ceo) {
         await Notification.create({
@@ -184,13 +184,13 @@ router.put('/:id/approve', auth, role(['HOD', 'Admin', 'CEO']), async (req, res)
         punchMissed.status.hod = 'Rejected';
       } else if (
         req.user.loginType === 'Admin' &&
-        punchMissed.status.hod === 'Approved' &&
+        ["Approved", "Submitted"].includes(punchMissed.status.hod) &&
         punchMissed.status.admin === 'Pending'
       ) {
         punchMissed.status.admin = 'Rejected';
       } else if (
         req.user.loginType === 'CEO' &&
-        punchMissed.status.hod === 'Approved' &&
+        ["Approved", "Submitted"].includes(punchMissed.status.hod) &&
         punchMissed.status.admin === 'Approved' &&
         punchMissed.status.ceo === 'Pending'
       ) {
@@ -230,7 +230,7 @@ router.put('/:id/approve', auth, role(['HOD', 'Admin', 'CEO']), async (req, res)
         }
       }
     } else if (req.user.loginType === 'Admin') {
-      if (punchMissed.status.hod !== 'Approved' || punchMissed.status.admin !== 'Pending') {
+      if (!["Approved", "Submitted"].includes(leave.status.hod) || punchMissed.status.admin !== 'Pending') {
         return res.status(400).json({ message: 'Admin approval not allowed yet' });
       }
       if (!adminInput || !/^(0?[1-9]|1[0-2]):[0-5][0-9] (AM|PM)$/i.test(adminInput)) {
@@ -253,7 +253,7 @@ router.put('/:id/approve', auth, role(['HOD', 'Admin', 'CEO']), async (req, res)
       }
     } else if (req.user.loginType === 'CEO') {
       if (
-        punchMissed.status.hod !== 'Approved' ||
+        ["Approved", "Submitted"].includes(punchMissed.status.hod) ||
         punchMissed.status.admin !== 'Approved' ||
         punchMissed.status.ceo !== 'Pending'
       ) {

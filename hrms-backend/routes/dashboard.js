@@ -129,11 +129,11 @@ router.get('/stats', auth, role(['Admin', 'CEO', 'HOD']), async (req, res) => {
         console.log(`Admin pending counts: Leaves=${leaveCount}, ODs=${odCount}, OTs=${otCount}, PunchMissed=${punchMissedCount}`);
       } else if (loginType === 'CEO') {
         const ceoMatch = {
-          'status.hod': 'Approved',
+          'status.hod': { $in: ["Approved", "Submitted"] },
           'status.ceo': 'Pending',
         };
         const ceoPunchMissedMatch = {
-          'status.hod': 'Approved',
+          'status.hod': { $in: ["Approved", "Submitted"] },
           'status.admin': 'Approved',
           'status.ceo': 'Pending',
         };

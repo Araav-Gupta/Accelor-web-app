@@ -89,13 +89,10 @@ router.post('/', auth, role(['Employee', 'HOD', 'Admin']), async (req, res) => {
     }
 
     const status = {
-      hod: req.user.role === 'Employee' ? 'Pending' : 'Approved',
+      hod: req.user.role === "Employee" ? "Pending" : req.user.role === "HOD" ? "Submitted" : "Approved",
       ceo: 'Pending',
       admin: 'Pending'
     };
-    if (req.user.role === 'HOD' || req.user.role === 'Admin') {
-      status.hod = 'Approved';
-    }
 
     const otClaim = new OTClaim({
       employeeId: user.employeeId,
@@ -247,8 +244,8 @@ router.put('/:id/approve', auth, role(['HOD', 'CEO', 'Admin']), async (req, res)
       return res.status(403).json({ message: 'Not authorized to approve OT claims for this department' });
     }
 
-    if (req.user.role === 'CEO' && otClaim.status.hod !== 'Approved') {
-      return res.status(400).json({ message: 'OT claim must be approved by HOD first' });
+    if (req.user.role === "CEO" && !["Approved", "Submitted"].includes(leave.status.hod)) {
+      return res.status(400).json({ message: 'OT claim must be approved or submitted by HOD first' });
     }
 
     if (req.user.role === 'Admin' && otClaim.status.ceo !== 'Approved') {
@@ -260,7 +257,7 @@ router.put('/:id/approve', auth, role(['HOD', 'CEO', 'Admin']), async (req, res)
       otClaim.remarks = remarks;
     }
 
-    if (status === 'Approved' && currentStage === 'hod') {
+    if (['Approved', 'Submitted'].includes(status) && currentStage === 'hod') {
       otClaim.status.ceo = 'Pending';
       const ceo = await Employee.findOne({ loginType: 'CEO' });
       if (ceo) {

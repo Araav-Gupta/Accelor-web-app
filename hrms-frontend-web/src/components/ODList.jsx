@@ -414,7 +414,7 @@ function ODList() {
                               </div>
                             )}
                           {user.loginType === "CEO" &&
-                            od.status.hod === "Approved" &&
+                            ["Approved", "Submitted"].includes(od.status.hod) &&
                             od.status.ceo === "Pending" && (
                               <div className="flex gap-2">
                                 <Button
