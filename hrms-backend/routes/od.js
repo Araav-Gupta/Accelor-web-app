@@ -38,13 +38,10 @@ router.post('/', auth, role(['Employee', 'HOD', 'Admin']), async (req, res) => {
     }
 
     const status = {
-      hod: req.user.role === 'Employee' ? 'Pending' : 'Approved',
+      hod: req.user.role === "Employee" ? "Pending" : req.user.role === "HOD" ? "Submitted" : "Approved",
       ceo: 'Pending',
       admin: 'Pending'
     };
-    if (req.user.role === 'HOD' || req.user.role === 'Admin') {
-      status.hod = 'Approved';
-    }
 
     const od = new OD({
       employeeId: user.employeeId,
@@ -193,8 +190,8 @@ router.put('/:id/approve', auth, role(['HOD', 'CEO', 'Admin']), async (req, res)
       return res.status(403).json({ message: 'Not authorized to approve ODs for this department' });
     }
 
-    if (req.user.role === 'CEO' && od.status.hod !== 'Approved') {
-      return res.status(400).json({ message: 'OD must be approved by HOD first' });
+    if (req.user.role === "CEO" && !["Approved", "Submitted"].includes(leave.status.hod)) {
+      return res.status(400).json({ message: 'OD must be approved or submitted by HOD first' });
     }
 
     if (req.user.role === 'Admin' && od.status.ceo !== 'Approved') {
@@ -210,7 +207,7 @@ router.put('/:id/approve', auth, role(['HOD', 'CEO', 'Admin']), async (req, res)
         await Notification.create({ userId: ceo.employeeId, message: `OD request from ${od.name} awaiting CEO approval` });
         if (global._io) global._io.to(ceo.employeeId).emit('notification', { message: `OD request from ${od.name} awaiting CEO approval` });
       }
-    } else if (status === 'Approved' && currentStage === 'ceo') {
+    } else if (['Approved', 'Submitted'].includes(status) && currentStage === 'ceo') {
       od.status.admin = 'Pending';
       const admin = await Employee.findOne({ loginType: 'Admin' });
       if (admin) {

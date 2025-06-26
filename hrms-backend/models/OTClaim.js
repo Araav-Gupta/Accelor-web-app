@@ -11,7 +11,7 @@ const otClaimSchema = new mongoose.Schema({
   compensatoryHours: { type: Number, default: 0 },
   paymentAmount: { type: Number, default: 0 },
   status: {
-    hod: { type: String, enum: ['Pending', 'Approved', 'Rejected'], default: 'Pending' },
+    hod: { type: String, enum: ['Pending', 'Approved', 'Rejected', 'Submitted'], default: 'Pending' },
     admin: { type: String, enum: ['Pending', 'Acknowledged'], default: 'Pending' },
     ceo: { type: String, enum: ['Pending', 'Approved', 'Rejected'], default: 'Pending' },
   },

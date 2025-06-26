@@ -545,7 +545,7 @@ function LeaveList() {
                             </div>
                           )}
                           {user.loginType === "CEO" &&
-                            leave.status.hod === "Approved" &&
+                            ["Approved", "Submitted"].includes(leave.status.hod) &&
                             leave.status.ceo === "Pending" && (
                               <div className="flex gap-2">
                                 <Button
