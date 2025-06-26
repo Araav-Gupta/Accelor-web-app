@@ -13,7 +13,7 @@ const odSchema = new mongoose.Schema({
   purpose: { type: String, required: true },
   placeUnitVisit: { type: String, required: true },
   status: {
-    hod: { type: String, enum: ['Pending', 'Approved', 'Rejected'], default: 'Pending' },
+    hod: { type: String, enum: ['Pending', 'Approved', 'Rejected', 'Submitted'], default: 'Pending' },
     admin: { type: String, enum: ['Pending', 'Acknowledged'], default: 'Pending' },
     ceo: { type: String, enum: ['Pending', 'Approved', 'Rejected'], default: 'Pending' },
   }

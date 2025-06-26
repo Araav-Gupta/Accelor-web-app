@@ -423,7 +423,7 @@ function OTApproval() {
                               </div>
                             )}
                           {user.loginType === "CEO" &&
-                            claim.status.hod === "Approved" &&
+                            ["Approved", "Submitted"].includes(claim.status.hod) &&
                             claim.status.ceo === "Pending" && (
                               <div className="flex gap-2">
                                 <Button

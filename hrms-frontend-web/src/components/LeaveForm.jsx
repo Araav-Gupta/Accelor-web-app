@@ -634,7 +634,7 @@ function LeaveForm() {
                 id="dates.to"
                 name="dates.to"
                 type="date"
-                value={form.dates.toDate}
+                value={form.dates.to}
                 onChange={handleChange}
                 min={
                   form.dates.from ||
