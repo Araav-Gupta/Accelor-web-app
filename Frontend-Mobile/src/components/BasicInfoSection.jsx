@@ -1,12 +1,9 @@
-// components/BasicInfoSection.jsx
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView, Modal, TouchableWithoutFeedback,ActivityIndicator,Image } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView, Modal, TouchableWithoutFeedback, ActivityIndicator, Image } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as FileSystem from 'expo-file-system';
 import { fetchFileAsBlob } from '../services/api';
-
-
 
 const formatDate = (dateInput) => {
     if (!dateInput) return '';
@@ -34,6 +31,7 @@ const BasicInfoSection = ({ profile, errors, onChange, onImagePick, isLocked }) 
     const [showEmploymentStatusPicker, setShowEmploymentStatusPicker] = useState(false);
     const [profileUri, setProfileUri] = useState(null);
     const [profileLoading, setProfileLoading] = useState(false);
+
     const genderOptions = [
         { label: 'Select Gender', value: '' },
         { label: 'Male', value: 'Male' },
@@ -71,41 +69,42 @@ const BasicInfoSection = ({ profile, errors, onChange, onImagePick, isLocked }) 
         { label: 'Aadhar Number', name: 'aadharNumber', keyboardType: 'numeric' },
         { label: 'Emergency Contact Name', name: 'emergencyContactName', keyboardType: 'default' },
         { label: 'Emergency Contact Number', name: 'emergencyContactNumber', keyboardType: 'phone-pad' },
-        { label: 'Employee ID', name: 'employeeId', keyboardType: 'default' }, // Added
-        { label: 'User ID', name: 'userId', keyboardType: 'default' }, // Added
-    ]
-        useEffect(() => {
-            const loadProfilePicture = async () => {
-                if (!profile?.profilePicture) return;
-                setProfileLoading(true);
+        { label: 'Employee ID', name: 'employeeId', keyboardType: 'default' },
+        { label: 'User ID', name: 'userId', keyboardType: 'default' },
+    ];
 
-                try {
-                    const cacheDir = `${FileSystem.cacheDirectory}downloaded_files/`;
-                    const extension = 'jpg'; // or png if you're using that
-                    const filePath = `${cacheDir}${profile.profilePicture}.${extension}`;
-                    const fileInfo = await FileSystem.getInfoAsync(filePath);
+    useEffect(() => {
+        const loadProfilePicture = async () => {
+            if (!profile?.profilePicture) return;
+            setProfileLoading(true);
 
-                    const isCacheValid = fileInfo.exists &&
-                        Date.now() - fileInfo.modificationTime * 1000 < 24 * 60 * 60 * 1000 &&
-                        fileInfo.size > 0;
+            try {
+                const cacheDir = `${FileSystem.cacheDirectory}downloaded_files/`;
+                const extension = 'jpg'; // or png if you're using that
+                const filePath = `${cacheDir}${profile.profilePicture}.${extension}`;
+                const fileInfo = await FileSystem.getInfoAsync(filePath);
 
-                    if (isCacheValid) {
-                        console.log('Using cached profile picture');
-                        setProfileUri(filePath);
-                    } else {
-                        console.log('Downloading new profile picture');
-                        const path = await fetchFileAsBlob(profile.profilePicture, `profile.${extension}`);
-                        setProfileUri(path);
-                    }
-                } catch (err) {
-                    console.error('Failed to load profile picture:', err.message);
-                } finally {
-                    setProfileLoading(false);
+                const isCacheValid = fileInfo.exists &&
+                    Date.now() - fileInfo.modificationTime * 1000 < 24 * 60 * 60 * 1000 &&
+                    fileInfo.size > 0;
+
+                if (isCacheValid) {
+                    console.log('Using cached profile picture');
+                    setProfileUri(filePath);
+                } else {
+                    console.log('Downloading new profile picture');
+                    const path = await fetchFileAsBlob(profile.profilePicture, `profile.${extension}`);
+                    setProfileUri(path);
                 }
-            };
+            } catch (err) {
+                console.error('Failed to load profile picture:', err.message);
+            } finally {
+                setProfileLoading(false);
+            }
+        };
 
-            loadProfilePicture();
-        }, [profile?.profilePicture]);
+        loadProfilePicture();
+    }, [profile?.profilePicture]);
 
     return (
         <View style={styles.container}>
@@ -115,7 +114,6 @@ const BasicInfoSection = ({ profile, errors, onChange, onImagePick, isLocked }) 
                 scrollEnabled={true}
                 bounces={true}
                 showsVerticalScrollIndicator={true}>
-
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Basic Information</Text>
 
@@ -131,7 +129,7 @@ const BasicInfoSection = ({ profile, errors, onChange, onImagePick, isLocked }) 
                         </View>
                     ) : (
                         <View style={styles.profileContainer}>
-                        <MaterialIcons name="person" size={50} color="#666666" style={styles.defaultIcon} />
+                            <MaterialIcons name="person" size={50} color="#666666" style={styles.defaultIcon} />
                         </View>
                     )}
 
@@ -320,6 +318,21 @@ const BasicInfoSection = ({ profile, errors, onChange, onImagePick, isLocked }) 
                         </Modal>
                     </View>
 
+                    {profile.maritalStatus === 'Married' && (
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.label}>Spouse Name</Text>
+                            <TextInput
+                                style={[styles.input, errors.spouseName && styles.inputError]}
+                                value={profile.spouseName || ''}
+                                onChangeText={(text) => onChange('spouseName', text)}
+                                keyboardType="default"
+                                editable={!isLocked}
+                                placeholder="Enter spouse name"
+                            />
+                            {errors.spouseName && <Text style={styles.errorText}>{errors.spouseName}</Text>}
+                        </View>
+                    )}
+
                     <View style={styles.inputGroup}>
                         <Text style={styles.label}>Employment Status</Text>
                         <TouchableOpacity
@@ -413,19 +426,17 @@ const styles = StyleSheet.create({
         borderRadius: 60,
         marginBottom: 20,
         marginRight: 20,
-    
         marginLeft: 10,
         marginTop: 20,
         flex: 1,
-      },
-      defaultIcon: {
+    },
+    defaultIcon: {
         width: 50,
         height: 50,
         borderRadius: 50,
         backgroundColor: '#f8fafc',
         justifyContent: 'center',
-    
-      },
+    },
     scrollContent: {
         padding: 16,
         paddingBottom: 100, // Extra space for the save button

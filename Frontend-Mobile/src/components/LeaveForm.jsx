@@ -25,9 +25,14 @@ import { SESSIONS, RESTRICTED_HOLIDAYS } from '../services/constants';
 
 const initialState = {
   leaveType: '',
-  duration: 'full',
-  fullDay: { from: '', to: '' },
-  halfDay: { date: '', session: 'forenoon' },
+  dates: {
+    from: '',
+    to: '',
+    fromDuration: 'full',
+    fromSession: 'afternoon',
+    toDuration: 'full',
+    toSession: 'forenoon',
+  },
   reason: '',
   chargeTo: '',
   emergencyContact: '',
@@ -41,42 +46,52 @@ const initialState = {
 };
 
 const leaveReducer = (state, action) => {
+  let newState;
+  
   switch (action.type) {
     case 'UPDATE_FIELD':
-      return { ...state, [action.key]: action.value };
-    case 'UPDATE_FULL_DAY':
-      return {
-        ...state,
-        fullDay: { ...state.fullDay, ...action.payload },
-        halfDay: state.duration === 'full' ? { date: '', session: 'forenoon' } : state.halfDay,
-      };
-    case 'UPDATE_HALF_DAY':
-      return {
-        ...state,
-        halfDay: { ...state.halfDay, ...action.payload },
-        fullDay: state.duration === 'half' ? { from: '', to: '' } : state.fullDay,
-      };
+      newState = { ...state, [action.key]: action.value };
+      break;
+      
+    case 'UPDATE_DATES':
+      const newDates = { ...state.dates, ...action.payload };
+      // Ensure toSession is 'afternoon' when toDuration is 'half'
+      if (action.payload.toDuration === 'half') {
+        newDates.toSession = 'forenoon';
+      }
+      newState = { ...state, dates: newDates };
+      break;
+      
     case 'RESET':
-      return { ...initialState, designation: action.payload };
+      newState = { ...initialState, designation: action.payload };
+      break;
+      
     default:
       return state;
   }
+  
+  // Execute callback with new state if provided
+  if (action.callback) {
+    setTimeout(() => action.callback(newState), 0);
+  }
+  
+  return newState;
 };
 
 const LeaveForm = ({ navigation }) => {
   const { user } = useContext(AuthContext);
-  const [form, dispatch] = useReducer(leaveReducer, { ...initialState, designation: user?.role || '' });
+  const [form, dispatch] = useReducer(leaveReducer, { ...initialState, designation: user?.designation || '' });
   const [leaveTypeVisible, setLeaveTypeVisible] = useState(false);
-  const [, forceUpdate] = useState({});
   const [restrictedHolidayVisible, setRestrictedHolidayVisible] = useState(false);
-  const [sessionVisible, setSessionVisible] = useState(false);
+  const [fromSessionVisible, setFromSessionVisible] = useState(false);
+  const [toSessionVisible, setToSessionVisible] = useState(false);
   const [compensatoryVisible, setCompensatoryVisible] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [compensatoryBalance, setCompensatoryBalance] = useState(0);
   const [compensatoryEntries, setCompensatoryEntries] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [canApplyEmergencyLeave, setCanApplyEmergencyLeave] = useState(false);
-  const [showDatePicker, setShowDatePicker] = useState({ fromDate: false, toDate: false, date: false });
+  const [showDatePicker, setShowDatePicker] = useState({ from: false, to: false });
   const [leaveRecords, setLeaveRecords] = useState([]);
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -86,10 +101,14 @@ const LeaveForm = ({ navigation }) => {
   const [employeeError, setEmployeeError] = useState('');
   const [employeeSearch, setEmployeeSearch] = useState('');
   const [showEmployeeDropdown, setShowEmployeeDropdown] = useState(false);
+  const [errors, setErrors] = useState({});
+  
+  // Force re-render when form dates change
+
 
   const handleEmployeeSelect = (employee) => {
-    console.log('Selected employee:', employee);
-    setEmployeeSearch('');
+    console.log('Selectted employee:', employee);
+    setEmployeeSearch(employee ? `${employee.firstName} ${employee.lastName}`.trim() : '');
     setShowEmployeeDropdown(false);
     const employeeId = employee?._id || employee?.id || '';
     console.log('Storing employee ID:', employeeId);
@@ -97,22 +116,14 @@ const LeaveForm = ({ navigation }) => {
   };
 
   const fetchLeaveRecords = useCallback(async () => {
-    console.log('fetchLeaveRecords called');
     try {
       const response = await api.get('/leaves', {
         params: { limit: 20, page: 1, sort: 'createdAt:-1', mine: true },
       });
-      console.log('Leave records response:', response.data);
       const records = Array.isArray(response.data.leaves) ? response.data.leaves : [];
-      console.log('Setting leave records:', JSON.stringify(records.length, null, 2));
       setLeaveRecords(records);
       return records;
     } catch (error) {
-      console.error('Error fetching leave records:', {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status,
-      });
       Alert.alert('Error', error.response?.data?.message || 'Failed to fetch leave records');
       setLeaveRecords([]);
       throw error;
@@ -122,119 +133,56 @@ const LeaveForm = ({ navigation }) => {
   }, []);
 
   const fetchEmployeeData = useCallback(async () => {
-    console.log('fetchEmployeeData called');
     try {
       const res = await api.get('/dashboard/employee-info');
-      console.log('Employee data response:', res.data);
-
       const { compensatoryLeaves = 0, compensatoryAvailable = [], canApplyEmergencyLeave = false } = res.data;
-
-      console.log('Setting employee data:', {
-        compensatoryLeaves,
-        compensatoryAvailableCount: compensatoryAvailable.length,
-        canApplyEmergencyLeave
-      });
-
       setCompensatoryBalance(compensatoryLeaves);
       setCompensatoryEntries(compensatoryAvailable);
       setCanApplyEmergencyLeave(canApplyEmergencyLeave);
-      console.log('Emergency permission:', canApplyEmergencyLeave);
-      console.log('Date:', res.data);
       return res.data;
     } catch (err) {
-      console.error('Error fetching employee data:', {
-        message: err.message,
-        response: err.response?.data,
-        status: err.response?.status,
-      });
-
       if (err.response?.status === 401) {
-        const errorMsg = 'Your session has expired. Please log in again.';
-        console.log(errorMsg);
-        Alert.alert('Session Expired', errorMsg, [
-          { text: 'OK', onPress: () => navigation.navigate('Login') }
+        Alert.alert('Session Expired', 'Your session has expired. Please log in again.', [
+          { text: 'OK', onPress: () => navigation.navigate('Login') },
         ]);
       } else {
-        const errorMsg = err.response?.data?.message || 'Failed to fetch employee data';
-        console.error(errorMsg);
-        Alert.alert('Error', errorMsg);
+        Alert.alert('Error', err.response?.data?.message || 'Failed to fetch employee data');
       }
-
       throw err;
     }
   }, [navigation]);
 
   const handleRefresh = useCallback(async () => {
-    console.log('handleRefresh called');
     setRefreshing(true);
     setIsLoading(true);
-
     try {
-      console.log('Refreshing data...');
-      await Promise.all([
-        fetchEmployeeData(),
-        fetchLeaveRecords()
-      ]);
-      console.log('Refresh completed successfully');
+      await Promise.all([fetchEmployeeData(), fetchLeaveRecords()]);
     } catch (error) {
       console.error('Error during refresh:', error);
     } finally {
-      console.log('Refreshing done, updating UI state');
       setIsLoading(false);
       setRefreshing(false);
     }
-  }, [fetchEmployeeData, fetchLeaveRecords]);
+  }, [fetchEmployeeData, fetchLeaveRecords, calculateLeaveDays]);
 
   useEffect(() => {
-    console.log('useEffect triggered', { user, hasUser: !!user });
     let isMounted = true;
-    console.log('User object:', user);
-    console.log('user role', user.role);
     const loadData = async () => {
-      console.log('loadData called', { user });
-
-      if (user === null) {
-        console.log('User is null, redirecting to login');
+      if (!user) {
         navigation.navigate('Login');
         return;
       }
-
-      const userId = user?._id || user?.id;
-      console.log('Using user ID:', userId);
-
-      if (!userId) {
-        console.log('User ID not available yet, waiting...');
-        return;
-      }
-
-      console.log('Starting data fetch...');
       setIsLoading(true);
       try {
-        const results = await Promise.all([
-          fetchEmployeeData().catch(e => {
-            console.error('Error in fetchEmployeeData:', e);
-            return null;
-          }),
-          fetchLeaveRecords().catch(e => {
-            console.error('Error in fetchLeaveRecords:', e);
-            return null;
-          })
-        ]);
-        console.log('Data fetch completed', { results });
+        await Promise.all([fetchEmployeeData(), fetchLeaveRecords()]);
       } catch (error) {
-        console.error('Error in Promise.all:', error);
+        console.error('Error in loadData:', error);
       } finally {
-        console.log('Setting loading to false');
-        if (isMounted) {
-          setIsLoading(false);
-        }
+        if (isMounted) setIsLoading(false);
       }
     };
-
     loadData();
-
     return () => {
-      console.log('Cleaning up...');
       isMounted = false;
     };
   }, [user, navigation, fetchEmployeeData, fetchLeaveRecords]);
@@ -243,52 +191,35 @@ const LeaveForm = ({ navigation }) => {
     const fetchDepartmentEmployees = async () => {
       const userId = user?._id || user?.id;
       if (!userId) return;
-
       setLoadingEmployees(true);
       setEmployeeError('');
       try {
         const params = new URLSearchParams();
-        if (form.duration === 'full' && form.fullDay.from && form.fullDay.to) {
-          params.append('startDate', form.fullDay.from);
-          params.append('endDate', form.fullDay.to);
-        } else if (form.duration === 'half' && form.halfDay.date) {
-          params.append('startDate', form.halfDay.date);
-          params.append('endDate', form.halfDay.date);
-        } else {
-          setEmployees([]);
-          return;
+        if (form.dates.from) {
+          params.append('startDate', form.dates.from);
+          params.append('endDate', form.dates.to || form.dates.from);
+          params.append('fromDuration', form.dates.fromDuration);
+          params.append('fromSession', form.dates.fromDuration === 'half' ? form.dates.fromSession : undefined);
+          params.append('toDuration', form.dates.to ? form.dates.toDuration : undefined);
+          params.append('toSession', form.dates.to && form.dates.toDuration === 'half' ? form.dates.toSession : undefined);
         }
-
-        console.log('Fetching department employees with params:', params.toString());
         const res = await api.get(`/employees/department?${params.toString()}`);
-        console.log('Department employees response:', res.data);
-
-        const filteredEmployees = Array.isArray(res.data)
-          ? res.data.filter(emp => (emp._id || emp.id) !== userId)
-          : [];
-
-        console.log('Filtered employees:', filteredEmployees);
+        const apiEmployees = Array.isArray(res.data) ? res.data : [];
+        const filteredEmployees = apiEmployees.filter(emp => (emp._id || emp.id) !== userId);
         setEmployees(filteredEmployees);
-
         if (form.chargeTo && !filteredEmployees.some(emp => (emp._id || emp.id) === form.chargeTo)) {
-          console.log('Resetting chargeTo as selected employee is no longer available');
           dispatch({ type: 'UPDATE_FIELD', key: 'chargeTo', value: '' });
+          setEmployeeSearch('');
           Alert.alert('Info', 'Selected employee is no longer available for the chosen dates.');
         }
       } catch (err) {
-        console.error('Error fetching department employees:', {
-          message: err.message,
-          response: err.response?.data,
-          status: err.response?.status,
-        });
         setEmployeeError('Failed to load employees. Please try again.');
       } finally {
         setLoadingEmployees(false);
       }
     };
-
     fetchDepartmentEmployees();
-  }, [form.duration, form.fullDay.from, form.fullDay.to, form.halfDay.date, form.chargeTo, user]);
+  }, [form.dates.from, form.dates.to, form.dates.fromDuration, form.dates.fromSession, form.dates.toDuration, form.dates.toSession, user]);
 
   const pickDocument = async (type = 'medical') => {
     try {
@@ -316,7 +247,6 @@ const LeaveForm = ({ navigation }) => {
         });
       }
     } catch (err) {
-      console.error('Error picking document:', err);
       Alert.alert('Error', 'Failed to pick document');
     }
   };
@@ -334,15 +264,28 @@ const LeaveForm = ({ navigation }) => {
   };
 
   const handleChange = (key, value) => {
-    console.log('handleChange called with:', { key, value });
-    if (key === 'leaveType') {
-      dispatch({ type: 'UPDATE_FIELD', key, value });
-    } else if (key.includes('fullDay.')) {
+    if (key.includes('dates.')) {
       const field = key.split('.')[1];
-      dispatch({ type: 'UPDATE_FULL_DAY', payload: { [field]: value } });
-    } else if (key.includes('halfDay.')) {
-      const field = key.split('.')[1];
-      dispatch({ type: 'UPDATE_HALF_DAY', payload: { [field]: value } });
+      
+      // If fromDuration is being set to 'half' or fromSession is set to 'forenoon', reset the to date fields
+      if (field === 'fromSession' && value === 'forenoon' && form.dates.fromDuration === 'half') {
+        const updatedDates = {
+          fromSession: value,
+          to: form.dates.from,  // Reset to the same as from date
+          toDuration: 'half',   // Set to half day
+          toSession: 'afternoon' // Set to afternoon session
+        };
+        
+        dispatch({ 
+          type: 'UPDATE_DATES', 
+          payload: updatedDates
+        });
+      }  else {
+        dispatch({ 
+          type: 'UPDATE_DATES', 
+          payload: { [field]: value }
+        });
+      }
     } else {
       dispatch({ type: 'UPDATE_FIELD', key, value });
     }
@@ -356,14 +299,9 @@ const LeaveForm = ({ navigation }) => {
       return;
     }
     const formattedDate = selectedDate.toISOString().split('T')[0];
-    if (field === 'fromDate' || field === 'toDate') {
-      const fieldName = field === 'fromDate' ? 'from' : 'to';
-      dispatch({ type: 'UPDATE_FULL_DAY', payload: { [fieldName]: formattedDate } });
-      if (field === 'fromDate' && (!form.fullDay.to || new Date(form.fullDay.to) < new Date(formattedDate))) {
-        dispatch({ type: 'UPDATE_FULL_DAY', payload: { to: formattedDate } });
-      }
-    } else if (field === 'date') {
-      dispatch({ type: 'UPDATE_HALF_DAY', payload: { date: formattedDate } });
+    dispatch({ type: 'UPDATE_DATES', payload: { [field]: formattedDate } });
+    if (field === 'from' && (!form.dates.to || new Date(form.dates.to) < new Date(formattedDate))) {
+      dispatch({ type: 'UPDATE_DATES', payload: { to: formattedDate } });
     }
   };
 
@@ -372,96 +310,239 @@ const LeaveForm = ({ navigation }) => {
   };
 
   const calculateLeaveDays = useCallback(() => {
-    if (form.duration === 'half' && form.halfDay.date) return 0.5;
-    if (form.duration === 'full' && form.fullDay.from && form.fullDay.to) {
-      const from = new Date(form.fullDay.from);
-      const to = new Date(form.fullDay.to);
-      return to >= from ? (to - from) / (1000 * 60 * 60 * 24) + 1 : 0;
+    if (!form.dates.from) return 0;
+    
+    // Single day leave
+    if (!form.dates.to || form.dates.from === form.dates.to) {
+      return form.dates.fromDuration === 'half' ? 0.5 : 1;
     }
-    return 0;
-  }, [form.duration, form.fullDay.from, form.fullDay.to, form.halfDay.date]);
+    
+    // Multi-day leave
+    const from = new Date(form.dates.from);
+    const to = new Date(form.dates.to);
+    
+    if (from > to) return 0; // Invalid date range
+    
+    const totalDays = Math.ceil((to - from) / (1000 * 60 * 60 * 24)) + 1;
+    
+    // If it's a single day but with to date set, still count as single day
+    if (totalDays === 1) {
+      return form.dates.fromDuration === 'half' ? 0.5 : 1;
+    }
+    
+    // For multiple days, calculate full days and handle first/last day sessions
+    let leaveDays = 0;
+    
+    // First day
+    if (form.dates.fromDuration === 'half') {
+      leaveDays += 0.5;
+    } else {
+      leaveDays += 1;
+    }
+    
+    // Middle days (full days)
+    if (totalDays > 2) {
+      leaveDays += (totalDays - 2);
+    }
+    
+    // Last day (if different from first day)
+    if (totalDays > 1) {
+      if (form.dates.toDuration === 'half') {
+        leaveDays += 0.5;
+      } else {
+        leaveDays += 1;
+      }
+    }
+    
+    return leaveDays;
+  }, [form.dates.from, form.dates.to, form.dates.fromDuration, form.dates.toDuration, form.dates.fromSession, form.dates.toSession]);
 
   const formatDateForBackend = (dateString) => {
     if (!dateString) return '';
-    if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) return dateString;
-    const date = new Date(dateString);
-    if (isNaN(date.getTime())) return '';
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    
+    // If already in YYYY-MM-DD format, return as is
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+      return dateString;
+    }
+    
+    try {
+      // Create a date object and handle timezone offset
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return '';
+      
+      // Get local date components (this handles timezone automatically)
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      
+      // Format as YYYY-MM-DD
+      const formattedDate = `${year}-${month}-${day}`;
+      
+      // Debug log
+      console.log('Formatted date:', { input: dateString, output: formattedDate });
+      
+      return formattedDate;
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return '';
+    }
+  };
+
+  const validateForm = () => {
+    const newErrors = {};
+    if (!form.leaveType) newErrors.leaveType = 'Leave Type is required';
+    if (!form.reason.trim()) newErrors.reason = 'Reason is required';
+    if (!form.chargeTo) newErrors.chargeTo = 'Please select an employee to charge';
+    if (form.dates.fromDuration === 'full' && (!form.dates.from || !form.dates.to)) {
+      newErrors.dates = 'Both From and To dates are required for full-day leave';
+    }
+    if (form.dates.fromDuration === 'half' && !form.dates.from) {
+      newErrors.dates = 'Date is required for half-day leave';
+    }
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('Form state before submission:', {
-      leaveType: form.leaveType,
-      chargeTo: form.chargeTo,
-      reason: form.reason,
-      duration: form.duration,
-      fullDay: form.fullDay,
-      halfDay: form.halfDay
+    console.log('[DEBUG] Form submission started');
+    
+    // Log current form state
+    console.log('[DEBUG] Current form state:', {
+      ...form,
+      dates: {
+        ...form.dates,
+        // Add human-readable dates for debugging
+        fromDate: form.dates.from ? new Date(form.dates.from).toISOString() : null,
+        toDate: form.dates.to ? new Date(form.dates.to).toISOString() : null
+      }
     });
-
-    dispatch({ type: 'UPDATE_FIELD', key: 'submitCount', value: form.submitCount + 1 });
-    if (!form.chargeTo) {
-      Alert.alert('Error', 'Please select an employee to charge');
+    
+    if (!validateForm()) {
+      console.log('[DEBUG] Form validation failed');
       return;
     }
-    const leaveDays = calculateLeaveDays();
-    console.log('Validating with:', {
-      form: {
-        ...form,
-        emergencyContact: form.emergencyContact,
-        duration: form.duration,
-        leaveType: form.leaveType,
-        reason: form.reason,
-        chargeTo: form.chargeTo
-      },
-      leaveDays,
-      hasEmergencyContact: !!form.emergencyContact,
-      hasDuration: !!form.duration,
-      hasLeaveType: !!form.leaveType,
-      hasReason: !!form.reason,
-      hasChargeTo: !!form.chargeTo
-    });
-    console.log('User:', user);
-    const validationError = validateLeaveForm(
-      form,
-      user,
-      leaveDays,
-      compensatoryEntries,
-      canApplyEmergencyLeave
-    );
-
-    console.log('Validation error:', validationError);
-    if (validationError) {
-      Alert.alert('Error', validationError);
-      return;
-    }
+    
     setSubmitting(true);
+    console.log('[DEBUG] Setting submitting to true');
+    
     try {
       const leaveData = new FormData();
-      const fromDate = form.duration === 'full' ? formatDateForBackend(form.fullDay.from) : formatDateForBackend(form.halfDay.date);
-      const toDate = form.duration === 'full' ? formatDateForBackend(form.fullDay.to) : formatDateForBackend(form.halfDay.date);
-      leaveData.append('leaveType', form.leaveType);
-      leaveData.append('duration', form.duration);
-      if (form.duration === 'half') {
-        leaveData.append('halfDay[date]', fromDate);
-        leaveData.append('session', form.halfDay.session);
-      } else {
-        leaveData.append('fullDay[from]', fromDate);
-        leaveData.append('fullDay[to]', toDate);
+      
+      // Format and validate dates
+      // Ensure dates are in YYYY-MM-DD format without time
+      const fromDate = new Date(form.dates.from);
+      const toDate = form.dates.to ? new Date(form.dates.to) : fromDate;
+      
+      const formatDateForBackend = (date) => {
+        if (!date) return '';
+        const d = new Date(date);
+        return d.toISOString().split('T')[0]; // Returns YYYY-MM-DD
+      };
+      
+      const fromDateStr = formatDateForBackend(fromDate);
+      const toDateStr = form.dates.to ? formatDateForBackend(toDate) : fromDateStr;
+      
+      // Debug log the dates being sent
+      console.log('[DEBUG] Formatted dates:', {
+        rawFrom: form.dates.from,
+        rawTo: form.dates.to,
+        formattedFrom: fromDate,
+        formattedTo: toDate,
+        fromDuration: form.dates.fromDuration,
+        toDuration: form.dates.toDuration,
+        fromSession: form.dates.fromSession,
+        toSession: form.dates.toSession,
+        currentDate: new Date().toISOString()
+      });
+      
+      // Basic date validation
+      if (!fromDate) {
+        const error = new Error('From date is required');
+        console.error('[ERROR] Validation failed:', error);
+        throw error;
       }
+      
+      // If it's a full day leave or multi-day leave, ensure toDate is valid
+      if (form.dates.fromDuration === 'full' && !toDate) {
+        const error = new Error('To date is required for full-day leave');
+        console.error('[ERROR] Validation failed:', error);
+        throw error;
+      }
+      
+      // Prepare the fullDay object that matches backend expectations
+      const fullDay = {
+        from: fromDateStr,
+        fromDuration: form.dates.fromDuration,
+      };
+      
+      // Add session only for half-day leaves
+      if (form.dates.fromDuration === 'half') {
+        fullDay.fromSession = form.dates.fromSession || 'forenoon';
+      }
+      
+      // Add to date and duration if it's a multi-day leave
+      if (form.dates.to && form.dates.to !== form.dates.from) {
+        fullDay.to = toDateStr;
+        fullDay.toDuration = form.dates.toDuration || 'full';
+        
+        if (fullDay.toDuration === 'half') {
+          fullDay.toSession = form.dates.toSession || 'forenoon';
+        }
+      } else if (form.dates.fromDuration === 'full') {
+        // For single full day, set toDate same as fromDate
+        fullDay.to = fromDateStr;
+      }
+      
+      // Append the structured data to FormData
+      leaveData.append('leaveType', form.leaveType);
+      
+      // Append each property of fullDay individually
+      Object.entries(fullDay).forEach(([key, value]) => {
+        if (value !== undefined) {
+          leaveData.append(`fullDay[${key}]`, value);
+        }
+      });
+      
+      // Debug log how the FormData will be sent
+      console.log('[DEBUG] FormData entries:');
+      for (let [key, value] of leaveData._parts) {
+        console.log(`${key}:`, value);
+      }
+      
+      // Debug log the fullDay object
+      console.log('[DEBUG] fullDay object:', JSON.stringify(fullDay, null, 2));
+      console.log('[DEBUG] Raw date values:', {
+        rawFrom: form.dates.from,
+        rawTo: form.dates.to,
+        formattedFrom: fromDateStr,
+        formattedTo: toDateStr,
+        fromDuration: form.dates.fromDuration,
+        toDuration: form.dates.toDuration,
+        fromSession: form.dates.fromSession,
+        toSession: form.dates.toSession
+      });
+      // Add other form fields
       leaveData.append('reason', form.reason);
       leaveData.append('chargeGivenTo', form.chargeTo);
       leaveData.append('emergencyContact', form.emergencyContact);
+      
+      // Add compensatory leave details if applicable
       if (form.leaveType === 'Compensatory') {
         leaveData.append('compensatoryEntryId', form.compensatoryEntry);
       }
+      
+      // Add restricted holiday details if applicable
       if (form.leaveType === 'Restricted Holidays') {
         leaveData.append('restrictedHoliday', form.restrictedHoliday);
       }
+      
+      // Log the final payload (without files)
+      const payload = {};
+      for (let [key, value] of leaveData._parts) {
+        payload[key] = value;
+      }
+      console.log('Final leave request payload:', JSON.stringify(payload, null, 2));
       if (form.projectDetails) {
         leaveData.append('projectDetails', form.projectDetails);
       }
@@ -481,17 +562,41 @@ const LeaveForm = ({ navigation }) => {
         };
         leaveData.append('supportingDocuments', file);
       });
-      await api.post('/leaves', leaveData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+      console.log('[DEBUG] Sending leave request...');
+      const response = await api.post('/leaves', leaveData, {
+        headers: { 
+          'Content-Type': 'multipart/form-data',
+          'Accept': 'application/json'
+        },
+        transformRequest: (data) => {
+          // Let axios handle the FormData
+          console.log('[DEBUG] Transform request data:', data);
+          return data;
+        }
       });
+      
+      console.log('[DEBUG] Leave submission successful:', response.data);
       Alert.alert('Success', 'Leave submitted successfully');
+      
+      // Refresh data
       await fetchLeaveRecords();
-      dispatch({ type: 'RESET', payload: user?.Designation || '' });
+      dispatch({ type: 'RESET', payload: user?.designation || '' });
       const res = await api.get('/dashboard/employee-info');
       setCompensatoryBalance(res.data.compensatoryLeaves || 0);
       setCompensatoryEntries(res.data.compensatoryAvailable || []);
+      setEmployeeSearch('');
+      setErrors({});
     } catch (err) {
-      console.error('Leave submit error:', err.response?.data || err.message);
+      console.error('[ERROR] Leave submission failed:', {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status,
+        config: {
+          url: err.config?.url,
+          method: err.config?.method,
+          data: err.config?.data
+        }
+      });
       Alert.alert('Error', err.response?.data?.message || 'An error occurred while submitting the leave');
     } finally {
       setSubmitting(false);
@@ -505,6 +610,10 @@ const LeaveForm = ({ navigation }) => {
       </View>
     );
   }
+
+  const filteredEmployees = employees.filter(emp =>
+    `${emp.firstName} ${emp.lastName}`.toLowerCase().includes(employeeSearch.toLowerCase())
+  );
 
   return (
     <PaperProvider>
@@ -520,29 +629,16 @@ const LeaveForm = ({ navigation }) => {
             <Text style={styles.title}>Apply for Leave</Text>
 
             <View>
-              <View>
-                <LeaveTypeSelector
-                  leaveType={form.leaveType}
-                  userDepartment={user?.department?.name}
-                  setLeaveType={(value) => {
-                    console.log('Setting leave type to:', value);
-                    let leaveTypeValue = '';
-                    if (typeof value === 'string') {
-                      leaveTypeValue = value;
-                    } else if (value && typeof value === 'object') {
-                      leaveTypeValue = value.name || JSON.stringify(value);
-                    }
-                    console.log('Storing leave type as:', leaveTypeValue);
-                    dispatch({ type: 'UPDATE_FIELD', key: 'leaveType', value: leaveTypeValue });
-                  }}
-                  canApplyEmergencyLeave={canApplyEmergencyLeave}
-                  leaveTypeVisible={leaveTypeVisible}
-                  setLeaveTypeVisible={setLeaveTypeVisible}
-                />
-                {!form.leaveType && form.submitCount > 0 && (
-                  <Text style={styles.errorText}>Leave Type is required</Text>
-                )}
-              </View>
+              <LeaveTypeSelector
+                leaveType={form.leaveType}
+                userDepartment={user?.department?.name}
+                setLeaveType={(value) => dispatch({ type: 'UPDATE_FIELD', key: 'leaveType', value })}
+                canApplyEmergencyLeave={canApplyEmergencyLeave}
+                leaveTypeVisible={leaveTypeVisible}
+                setLeaveTypeVisible={setLeaveTypeVisible}
+                error={errors.leaveType}
+              />
+              {errors.leaveType && <Text style={styles.errorText}>{errors.leaveType}</Text>}
             </View>
 
             {form.leaveType === 'Compensatory' && (
@@ -567,8 +663,7 @@ const LeaveForm = ({ navigation }) => {
                             ? 'No available entries'
                             : form.compensatoryEntry
                               ? compensatoryEntries.find(e => e._id === form.compensatoryEntry)?.date
-                                ? `${new Date(compensatoryEntries.find(e => e._id === form.compensatoryEntry).date).toLocaleDateString()} - ${compensatoryEntries.find(e => e._id === form.compensatoryEntry).hours
-                                } hours`
+                                ? `${new Date(compensatoryEntries.find(e => e._id === form.compensatoryEntry).date).toLocaleDateString()} - ${compensatoryEntries.find(e => e._id === form.compensatoryEntry).hours} hours`
                                 : 'Select compensatory entry'
                               : 'Select compensatory entry'}
                         </Text>
@@ -635,134 +730,172 @@ const LeaveForm = ({ navigation }) => {
               </View>
             )}
 
-            <View style={styles.formGroup}>
+            <View style={styles.fullDayContainer}>
+              <View style={[styles.formGroup, { flex: 1 }]}>
+                <Text style={styles.labelText}>From Date</Text>
+                <TouchableOpacity
+                  style={[styles.input, { justifyContent: 'center' }]}
+                  onPress={() => showDatepicker('from')}
+                >
+                  <Text style={form.dates.from ? styles.dropdownText : styles.dropdownDay}>
+                    {form.dates.from || 'Select date'}
+                  </Text>
+                </TouchableOpacity>
+                <View style={styles.durationContainer}>
+                  <TouchableOpacity
+                    style={[styles.durationButton, form.dates.fromDuration === 'full' && styles.activeDuration]}
+                    onPress={() => handleChange('dates.fromDuration', 'full')}
+                  >
+                    <Text style={form.dates.fromDuration === 'full' ? styles.activeText : styles.inactiveText}>Full Day</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.durationButton, form.dates.fromDuration === 'half' && styles.activeDuration]}
+                    onPress={() => handleChange('dates.fromDuration', 'half')}
+                  >
+                    <Text style={form.dates.fromDuration === 'half' ? styles.activeText : styles.inactiveText}>Half Day</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {form.dates.fromDuration === 'half' && (
+                  <>
+                    <Text style={[styles.labelText, { marginTop: 10 }]}>Session</Text>
+                    <Menu
+                      visible={fromSessionVisible}
+                      onDismiss={() => setFromSessionVisible(false)}
+                      contentStyle={{ backgroundColor: '#ffffff', marginTop: -40 }}
+                      anchor={
+                        <TouchableOpacity
+                          style={styles.dropdownButton}
+                          onPress={() => setFromSessionVisible(true)}
+                        >
+                          <Text style={styles.dropdownText}>
+                            {form.dates.fromSession.charAt(0).toUpperCase() + form.dates.fromSession.slice(1)}
+                          </Text>
+                        </TouchableOpacity>
+                      }
+                    >
+                      {SESSIONS.map((session) => (
+                        <Menu.Item
+                          key={session}
+                          onPress={() => {
+                            handleChange('dates.fromSession', session);
+                            setFromSessionVisible(false);
+                          }}
+                          title={session.charAt(0).toUpperCase() + session.slice(1)}
+                          titleStyle={styles.titleStyle}
+                        />
+                      ))}
+                    </Menu>
+                  </>
+                )}
+              </View>
+                      
+
+              {form.dates.from && (
+                form.dates.fromDuration?.toLowerCase() === 'full' || 
+                (form.dates.fromDuration?.toLowerCase() === 'half' && form.dates.fromSession?.toLowerCase() === 'afternoon')
+              ) && (
+                <View style={[styles.formGroup, { flex: 1, marginLeft: 10 }]}>
+                  <Text style={styles.labelText}>To Date</Text>
+                  <TouchableOpacity
+                    style={[styles.input, { justifyContent: 'center' }]}
+                    onPress={() => showDatepicker('to')}
+                  >
+                    <Text style={form.dates.to ? styles.dropdownText : styles.dropdownDay}>
+                      {form.dates.to || 'Select date'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  {/* <Text style={styles.labelText}>To Duration</Text> */}
+                  <View style={styles.durationContainer}>
+                    <TouchableOpacity
+                      style={[styles.durationButton, form.dates.toDuration === 'full' && styles.activeDuration]}
+                      onPress={() => handleChange('dates.toDuration', 'full')}
+                    >
+                      <Text style={form.dates.toDuration === 'full' ? styles.activeText : styles.inactiveText}>Full Day</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.durationButton, form.dates.toDuration === 'half' && styles.activeDuration]}
+                      onPress={() => handleChange('dates.toDuration', 'half')}
+                    >
+                      <Text style={form.dates.toDuration === 'half' ? styles.activeText : styles.inactiveText}>Half Day</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {form.dates.toDuration === 'half' && (
+                    <>
+                      <Text style={[styles.labelText, { marginTop: 10 }]}>Session</Text>
+                      <Menu
+                        visible={toSessionVisible}
+                        onDismiss={() => setToSessionVisible(false)}
+                        contentStyle={{ backgroundColor: '#ffffff', marginTop: -40 }}
+                        anchor={
+                          <TouchableOpacity
+                            style={styles.dropdownButton}
+                            onPress={() => setToSessionVisible(true)}
+                          >
+                            <Text style={styles.dropdownText}>
+                              {form.dates.toSession.charAt(0).toUpperCase() + form.dates.toSession.slice(1)}
+                            </Text>
+                          </TouchableOpacity>
+                        }
+                      >
+                        <Menu.Item
+                          key="forenoon"
+                          onPress={() => {
+                            handleChange('dates.toSession', 'forenoon');
+                            setToSessionVisible(false);
+                          }}
+                          title="Forenoon"
+                          titleStyle={styles.titleStyle}
+                        />
+                      </Menu>
+                    </>
+                  )}
+                </View>
+              )}
+            </View>
+
+            {/* <View style={styles.formGroup}>
               <Text style={styles.labelText}>Leave Duration</Text>
               <View style={styles.durationContainer}>
                 <TouchableOpacity
-                  style={[styles.durationButton, form.duration === 'full' && styles.activeDuration]}
-                  onPress={() => handleChange('duration', 'full')}
+                  style={[styles.durationButton, form.dates.fromDuration === 'full' && styles.activeDuration]}
+                  onPress={() => handleChange('dates.fromDuration', 'full')}
                 >
-                  <Text style={form.duration === 'full' ? styles.activeText : styles.inactiveText}>Full Day</Text>
+                  <Text style={form.dates.fromDuration === 'full' ? styles.activeText : styles.inactiveText}>Full Day</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[
                     styles.durationButton,
-                    form.duration === 'half' && styles.activeDuration,
+                    form.dates.fromDuration === 'half' && styles.activeDuration,
                     form.leaveType === 'Medical' && { opacity: 0.6 },
                   ]}
                   onPress={() => {
                     if (form.leaveType !== 'Medical') {
-                      handleChange('duration', 'half');
+                      handleChange('dates.fromDuration', 'half');
                     }
                   }}
                   disabled={form.leaveType === 'Medical'}
                 >
-                  <Text style={form.duration === 'half' ? styles.activeText : styles.inactiveText}>Half Day</Text>
+                  <Text style={form.dates.fromDuration === 'half' ? styles.activeText : styles.inactiveText}>Half Day</Text>
                 </TouchableOpacity>
               </View>
-            </View>
+            </View> */}
 
-            {form.duration === 'half' ? (
-              <View style={styles.halfDayContainer}>
-                <View style={[styles.formGroup, { flex: 1 }]}>
-                  <Text style={styles.labelText}>Session</Text>
-                  <Menu
-                    visible={sessionVisible}
-                    onDismiss={() => setSessionVisible(false)}
-                    contentStyle={{ backgroundColor: '#ffffff' }}
-                    style={{ marginTop: '-80' }}
-                    anchor={
-                      <TouchableOpacity style={[styles.dropdownButton, { flex: 1 }]} onPress={() => setSessionVisible(true)}>
-                        <Text style={styles.dropdownText}>
-                          {form.halfDay.session.charAt(0).toUpperCase() + form.halfDay.session.slice(1)}
-                        </Text>
-                      </TouchableOpacity>
-                    }
-                  >
-                    {SESSIONS.map((session) => (
-                      <Menu.Item
-                        key={session}
-                        onPress={() => {
-                          handleChange('halfDay.session', session);
-                          setSessionVisible(false);
-                        }}
-                        title={session.charAt(0).toUpperCase() + session.slice(1)}
-                        titleStyle={styles.titleStyle}
-                      />
-                    ))}
-                  </Menu>
-                </View>
-                <View style={[styles.formGroup, { flex: 1, marginLeft: 10 }]}>
-                  <Text style={styles.labelText}>Date</Text>
-                  <TouchableOpacity style={[styles.input, { justifyContent: 'center' }]} onPress={() => showDatepicker('date')}>
-                    <Text style={form.halfDay.date ? styles.dropdownText : styles.dropdownDay}>
-                      {form.halfDay.date || 'Select date'}
-                    </Text>
-                  </TouchableOpacity>
-                  
-                  {showDatePicker.date && (
-                    <View style={[styles.datePickerContainer, { marginTop: 10 }]}>
-                      <DateTimePicker
-                        value={form.halfDay.date ? new Date(form.halfDay.date) : new Date()}
-                        mode="date"
-                        display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                        onChange={(event, date) => onDateChange(event, date, 'date')}
-                        minimumDate={new Date()}
-                      />
-                      {Platform.OS === 'ios' && (
-                        <Button
-                          mode="contained"
-                          onPress={() => setShowDatePicker(prev => ({ ...prev, date: false }))}
-                          style={styles.dateButton}
-                        >
-                          Done
-                        </Button>
-                      )}
-                    </View>
-                  )}
-                </View>
-              </View>
-            ) : (
-              <View style={styles.fullDayContainer}>
-                <View style={[styles.formGroup, { flex: 1 }]}>
-                  <Text style={styles.labelText}>From Date</Text>
-                  <TouchableOpacity
-                    style={[styles.input, { justifyContent: 'center' }]}
-                    onPress={() => showDatepicker('fromDate')}
-                  >
-                    <Text style={form.fullDay.from ? styles.dropdownText : styles.dropdownDay}>
-                      {form.fullDay.from || 'Select date'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-                <View style={[styles.formGroup, { flex: 1, marginLeft: 10 }]}>
-                  <Text style={styles.labelText}>To Date</Text>
-                  <TouchableOpacity
-                    style={[styles.input, { justifyContent: 'center', opacity: !form.fullDay.from ? 0.6 : 1 }]}
-                    onPress={() => form.fullDay.from && showDatepicker('toDate')}
-                    disabled={!form.fullDay.from}
-                  >
-                    <Text style={form.fullDay.to ? styles.dropdownText : styles.dropdownDay}>
-                      {form.fullDay.to || 'Select date'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
-
-            {showDatePicker.fromDate && (
+            {showDatePicker.from && (
               <View style={[styles.datePickerContainer, { marginTop: 10 }]}>
                 <DateTimePicker
-                  value={form.fullDay.from ? new Date(form.fullDay.from) : new Date()}
+                  value={form.dates.from ? new Date(form.dates.from) : new Date()}
                   mode="date"
                   display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                  onChange={(event, date) => onDateChange(event, date, 'fromDate')}
+                  onChange={(event, date) => onDateChange(event, date, 'from')}
                   minimumDate={form.leaveType === 'Medical' ? null : new Date()}
                 />
                 {Platform.OS === 'ios' && (
                   <Button
                     mode="contained"
-                    onPress={() => setShowDatePicker(prev => ({ ...prev, fromDate: false }))}
+                    onPress={() => setShowDatePicker(prev => ({ ...prev, from: false }))}
                     style={styles.dateButton}
                   >
                     Done
@@ -771,19 +904,19 @@ const LeaveForm = ({ navigation }) => {
               </View>
             )}
 
-            {showDatePicker.toDate && (
+            {showDatePicker.to && (
               <View style={[styles.datePickerContainer, { marginTop: 10 }]}>
                 <DateTimePicker
-                  value={form.fullDay.to ? new Date(form.fullDay.to) : new Date()}
+                  value={form.dates.to ? new Date(form.dates.to) : new Date()}
                   mode="date"
                   display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                  onChange={(event, date) => onDateChange(event, date, 'toDate')}
-                  minimumDate={form.leaveType === 'Medical' ? null : new Date()}
+                  onChange={(event, date) => onDateChange(event, date, 'to')}
+                  minimumDate={form.leaveType === 'Medical' ? null : new Date(form.dates.from)}
                 />
                 {Platform.OS === 'ios' && (
                   <Button
                     mode="contained"
-                    onPress={() => setShowDatePicker(prev => ({ ...prev, toDate: false }))}
+                    onPress={() => setShowDatePicker(prev => ({ ...prev, to: false }))}
                     style={styles.dateButton}
                   >
                     Done
@@ -791,6 +924,8 @@ const LeaveForm = ({ navigation }) => {
                 )}
               </View>
             )}
+
+            {errors.dates && <Text style={styles.errorText}>{errors.dates}</Text>}
 
             <View style={[styles.formGroup, { marginTop: 10 }]}>
               <Text style={styles.labelText}>Leave Days</Text>
@@ -807,11 +942,8 @@ const LeaveForm = ({ navigation }) => {
                 multiline
                 numberOfLines={3}
                 maxLength={500}
-                error={form.submitCount > 0 && !form.reason.trim()}
               />
-              {form.submitCount > 0 && !form.reason.trim() && (
-                <Text style={styles.errorText}>Reason is required</Text>
-              )}
+              {errors.reason && <Text style={styles.errorText}>{errors.reason}</Text>}
             </View>
 
             <View style={styles.inputContainer}>
@@ -853,7 +985,7 @@ const LeaveForm = ({ navigation }) => {
                             console.log('Selected employee ID:', empId);
                             handleEmployeeSelect({ _id: empId, name: emp.name });
                           }}
-                          title={`${emp.name} (${emp.personId || 'N/A'})`}
+                          title={`${emp.name} `}
                           titleStyle={styles.titleStyle}
                         />
                       );
@@ -942,7 +1074,6 @@ const LeaveForm = ({ navigation }) => {
                 )}
               </View>
             )}
-
 
             <TouchableOpacity
               style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
@@ -1049,10 +1180,6 @@ const styles = StyleSheet.create({
   },
   inactiveText: {
     color: '#666',
-  },
-  halfDayContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
   },
   fullDayContainer: {
     flexDirection: 'row',

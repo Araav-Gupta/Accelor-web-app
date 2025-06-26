@@ -471,6 +471,7 @@ router.post('/', auth, role(['Admin']), ensureGfs, ensureDbConnection, checkForF
 // Update employee (Admin or authorized Employee)
 router.put('/:id', auth, ensureGfs, ensureDbConnection, checkForFiles, async (req, res) => {
   try {
+    console.log('Update request recieved')
     console.log('Received PUT request body:', req.body);
     console.log('Received files:', req.uploadedFiles);
     const employee = await Employee.findById(req.params.id);

@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Menu } from 'react-native-paper';
 import { LEAVE_TYPES, eligibleDepartments } from './constants';
 
-const LeaveTypeSelector = React.memo(({ leaveType, setLeaveType, canApplyEmergencyLeave, leaveTypeVisible, setLeaveTypeVisible, userDepartment }) => {
+const LeaveTypeSelector = React.memo(({ leaveType, setLeaveType, canApplyEmergencyLeave, leaveTypeVisible, setLeaveTypeVisible, userDepartment, error }) => {
   // Filter leave types based on conditions
   const filteredLeaveTypes = (() => {
     let types = [...LEAVE_TYPES];
@@ -31,7 +31,7 @@ const LeaveTypeSelector = React.memo(({ leaveType, setLeaveType, canApplyEmergen
         style={{ marginTop: -80 }}
         anchor={
           <TouchableOpacity
-            style={styles.dropdownButton}
+            style={[styles.dropdownButton, error && styles.errorBorder]}
             onPress={() => setLeaveTypeVisible(true)}
           >
             <Text style={leaveType ? styles.dropdownButtonText : styles.dropdownButtonPlaceholder}>
@@ -48,10 +48,11 @@ const LeaveTypeSelector = React.memo(({ leaveType, setLeaveType, canApplyEmergen
               setLeaveTypeVisible(false);
             }}
             title={type}
-            titleStyle={styles.dropdownItemText}
+            titleStyle={styles.titleStyle}
           />
         ))}
       </Menu>
+      {error && <Text style={styles.errorText}>{error}</Text>}
     </View>
   );
 });
@@ -76,6 +77,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     height: 46,
   },
+  errorBorder: {
+    borderColor: 'red',
+  },
   dropdownButtonText: {
     color: '#1f2937',
     fontSize: 16,
@@ -84,9 +88,14 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
     fontSize: 16,
   },
-  dropdownItemText: {
+  titleStyle: {
     fontSize: 16,
-    color: '#1f3337',
+    color: '#1f2937',
+  },
+  errorText: {
+    color: 'red',
+    fontSize: 12,
+    marginTop: 4,
   },
 });
 
