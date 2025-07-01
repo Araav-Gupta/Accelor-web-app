@@ -36,7 +36,7 @@ function Attendance() {
         toDate: new Date().toISOString().split('T')[0],
         status: 'all',
     });
-    const [employeeFilter, setEmployeeFilter] = useState('');
+    const [employeeNameFilter, setEmployeeNameFilter] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [currentPage, setCurrentPage] = useState(1);
@@ -87,22 +87,24 @@ function Attendance() {
         setLoading(true);
         try {
 
+            // Build the base params
             const params = {
                 fromDate: filters.fromDate || '',
                 toDate: filters.toDate || '',
+                // Always include departmentId for HODs
+                ...(user?.loginType === 'HOD' && { departmentId: user?.department?._id || filters.departmentId }),
                 // Only include status in params if it's not 'all' and not empty
                 ...(filters.status && filters.status !== 'all' && { status: filters.status }),
             };
 
+            // Add employee name filter if provided
+            if (employeeNameFilter) {
+                params.employeeName = employeeNameFilter.trim();
+            }
+
             console.log('Fetching attendance with filters:', JSON.stringify(params, null, 2));
 
-            if (user?.loginType === 'HOD') {
-                if (employeeFilter) {
-                    params.employeeId = employeeFilter;
-                } else {
-                    params.departmentId = user?.department?._id || filters.departmentId;
-                }
-            } else if (user?.employeeId) {
+            if (user?.loginType !== 'HOD' && user?.employeeId) {
                 params.employeeId = user.employeeId;
             } else {
                 setError('User ID not available');
@@ -131,7 +133,7 @@ function Attendance() {
         } finally {
             setLoading(false);
         }
-    }, [user, filters, employeeFilter]);
+    }, [user, filters, employeeNameFilter]);
 
     // Separate useEffect for initial setup
     useEffect(() => {
@@ -167,12 +169,13 @@ function Attendance() {
         setupUserData();
     }, [user?.loginType, user?.employeeId, user?.department?._id]);
 
-    // Separate useEffect for fetching attendance
+    // Initial data load
     useEffect(() => {
         if (user) {
+            // Only fetch initial data when component mounts
             fetchAttendance();
         }
-    }, [user, filters, employeeFilter]);
+    }, [user]); // Only depend on user, not filters
 
     const handleDateChange = useCallback((event, selectedDate, field) => {
         if (Platform.OS === 'android') {
@@ -201,15 +204,51 @@ function Attendance() {
         setFilters(prev => ({ ...prev, [name]: value }));
     }, []);
 
-    const handleFilter = useCallback(() => {
-        console.log('Applying filters:', filters);
-        if (filters.fromDate && !filters.toDate) {
-            console.log('Setting toDate same as fromDate');
-            setFilters(prev => ({ ...prev, toDate: filters.fromDate }));
+    const handleFilter = useCallback(async () => {
+        try {
+            console.log('Applying filters:', filters);
+            // Update toDate if only fromDate is provided
+            let updatedFilters = { ...filters };
+            if (filters.fromDate && !filters.toDate) {
+                console.log('Setting toDate same as fromDate');
+                updatedFilters.toDate = filters.fromDate;
+                setFilters(prev => ({ ...prev, toDate: filters.fromDate }));
+            }
+            
+            setCurrentPage(1); // Reset to first page when filters change
+            setLoading(true);
+            
+            // Prepare params with current filters
+            const params = {
+                fromDate: updatedFilters.fromDate || '',
+                toDate: updatedFilters.toDate || '',
+                ...(updatedFilters.status && updatedFilters.status !== 'all' && { status: updatedFilters.status }),
+                ...(employeeNameFilter && { employeeName: employeeNameFilter.trim() }),
+                ...(updatedFilters.departmentId && { departmentId: updatedFilters.departmentId })
+            };
+
+            console.log('Fetching attendance with params:', params);
+            const response = await api.get('/attendance', { params });
+            
+            if (!response.data || !Array.isArray(response.data.attendance)) {
+                throw new Error('Invalid attendance data received');
+            }
+            
+            setAttendance(response.data.attendance);
+            setError(null);
+        } catch (err) {
+            console.error('Error applying filters:', err);
+            if (err.response?.status === 403) {
+                // No employees found with that name in the department
+                setAttendance([]); // Clear the current results
+                setError('No matching employees found in your department');
+            } else {
+                setError(err.response?.data?.message || 'Failed to apply filters');
+            }
+        } finally {
+            setLoading(false);
         }
-        setCurrentPage(1); // Reset to first page when filters change
-        fetchAttendance();
-    }, [filters, fetchAttendance]);
+    }, [filters, employeeNameFilter]);
 
     const handlePreviousPage = useCallback(() => {
         console.log('Previous button pressed', { currentPage });
@@ -232,17 +271,8 @@ function Attendance() {
                 console.log('Setting page to:', prevPage + 1);
                 return prevPage + 1;
             });
-        } else {
-            console.log('Cannot go to next page - already on last page');
         }
     }, [currentPage, totalPages, attendance.length]);
-
-    const formatTime = useCallback((minutes) => {
-        if (!minutes) return '00:00';
-        const hours = Math.floor(minutes / 60);
-        const mins = minutes % 60;
-        return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
-    }, []);
 
     const renderItem = useCallback(({ item }) => (
         <Card style={styles.card}>
@@ -253,10 +283,9 @@ function Attendance() {
                 <Text>Time In: {item.timeIn || '-'}</Text>
                 <Text>Time Out: {item.timeOut || '-'}</Text>
                 <Text>Status: {item.status || 'N/A'}{item.halfDay ? ` (${item.halfDay})` : ''}</Text>
-                <Text>OT: {formatTime(item.ot || 0)}</Text>
             </Card.Content>
         </Card>
-    ), [formatTime]);
+    ), []);
 
     const hodDepartmentName = user?.loginType === 'HOD'
         ? departmentName || 'N/A'
@@ -289,15 +318,16 @@ function Attendance() {
                     <View style={styles.filterContainer}>
                         {user?.loginType === 'HOD' && (
                             <View style={styles.employeeFilterContainer}>
-                                <Text style={styles.filterLabel}>Employee ID:</Text>
+                                <Text style={styles.filterLabel}>Employee Name:</Text>
                                 <TextInput
                                     style={styles.employeeInput}
-                                    placeholder="Filter by Employee ID"
-                                    value={employeeFilter}
-                                    onChangeText={setEmployeeFilter}
+                                    placeholder="Search by employee name"
+                                    value={employeeNameFilter}
+                                    onChangeText={setEmployeeNameFilter}
                                     onSubmitEditing={fetchAttendance}
-                                    keyboardType="numeric"
-                                    accessibilityLabel="Employee ID Filter"
+                                    keyboardType="default"
+                                    autoCapitalize="words"
+                                    accessibilityLabel="Employee Name Filter"
                                 />
                             </View>
                         )}

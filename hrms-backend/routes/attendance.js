@@ -8,22 +8,59 @@ import Notification from '../models/Notification.js';
 import auth from '../middleware/auth.js';
 import role from '../middleware/role.js';
 import XLSX from 'xlsx';
+import RawPunchlog from '../models/RawPunchlog.js';
 const router = express.Router();
 
 router.get('/', auth, async (req, res) => {
   try {
     let filter = {};
 
-    // Apply role-based restrictions
+    // Apply role-based restrictions and employee name filter
     if (req.user.loginType === 'Employee') {
       filter = { employeeId: req.user.employeeId };
-    } else if (req.user.loginType === 'HOD') {
-      const user = await Employee.findById(req.user.id).populate('department');
-      if (!user.department?._id) {
-        return res.status(400).json({ message: 'HOD department not found' });
+    } else {
+      // For HOD or admin, build the base employee filter
+      const employeeQuery = {};
+
+      // If HOD, only show employees in their department
+      if (req.user.loginType === 'HOD') {
+        const user = await Employee.findById(req.user.id).populate('department');
+        if (!user.department?._id) {
+          return res.status(400).json({ message: 'HOD department not found' });
+        }
+        employeeQuery.department = user.department._id;
       }
-      const employees = await Employee.find({ department: user.department._id }).select('employeeId');
-      filter = { employeeId: { $in: employees.map(e => e.employeeId) } };
+
+      // If employee name is provided, add it to the query
+      if (req.query.employeeName) {
+        console.log('Searching for employee:', req.query.employeeName);
+        employeeQuery.name = new RegExp(req.query.employeeName, 'i');
+      }
+
+      console.log('Employee search query:', employeeQuery);
+
+      // Find employees based on the combined query
+      const employees = await Employee.find(employeeQuery).select('employeeId');
+      console.log('Found employees:', employees);
+
+      if (employees.length === 0) {
+        // No employees found matching the criteria
+        console.log('No employees found matching criteria');
+        return res.json({ attendance: [], total: 0 });
+      }
+
+      // Set the filter to only include the found employees
+      filter.employeeId = { $in: employees.map(e => e.employeeId) };
+      console.log('Final attendance filter:', filter);
+    }
+
+    // Apply date range filter if provided
+    if (req.query.fromDate) {
+      const fromDate = new Date(req.query.fromDate);
+      if (isNaN(fromDate)) {
+        return res.status(400).json({ message: 'Invalid fromDate format' });
+      }
+      filter.logDate = { $gte: fromDate };
     }
 
     // Apply employeeId filter if provided
@@ -42,7 +79,7 @@ router.get('/', auth, async (req, res) => {
         }
       }
       filter.employeeId = req.query.employeeId;
-    } else if (req.query.departmentId) {
+    } else if (req.query.departmentId && !filter.employeeId) {
       const department = await Department.findById(req.query.departmentId);
       if (!department) {
         return res.status(400).json({ message: 'Invalid department ID' });
@@ -60,18 +97,17 @@ router.get('/', auth, async (req, res) => {
       if (isNaN(fromDate)) {
         return res.status(400).json({ message: 'Invalid fromDate format' });
       }
-      // Adjust to UTC equivalent of IST start of day
-      const fromDateUTC = new Date(fromDate.getTime() - (5.5 * 60 * 60 * 1000));
-      fromDateUTC.setUTCHours(0, 0, 0, 0);
+      fromDate.setHours(0, 0, 0, 0); // Start of day IST
+    
       const toDate = req.query.toDate ? new Date(req.query.toDate) : new Date(fromDate);
       if (isNaN(toDate)) {
         return res.status(400).json({ message: 'Invalid toDate format' });
       }
-      // Adjust to UTC equivalent of IST end of day
-      const toDateUTC = new Date(toDate.getTime() - (5.5 * 60 * 60 * 1000));
-      toDateUTC.setUTCHours(23, 59, 59, 999);
-      filter.logDate = { $gte: fromDateUTC, $lte: toDateUTC };
+      toDate.setHours(23, 59, 59, 999); // End of day IST
+    
+      filter.logDate = { $gte: fromDate, $lte: toDate };
     }
+    
 
     // Apply status filter
     if (req.query.status && req.query.status !== 'all') {
@@ -105,11 +141,11 @@ router.get('/', auth, async (req, res) => {
         }
       }
     ]);
-    
- 
+
+
     const attendance = await Attendance.find(filter).lean();
 
-    
+
     // Log duplicates for debugging
     const keyCounts = {};
     attendance.forEach((record) => {
@@ -465,6 +501,38 @@ router.get('/download', auth, async (req, res) => {
   } catch (err) {
     console.error('Error generating Excel:', err);
     res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+router.post('/test', auth, async (req, res) => {
+  try {
+    const {
+
+      UserID,
+      LogDate,
+      LogTime,
+      Direction,
+      processed,
+
+    } = req.body;
+
+    const newAttendance = new RawPunchlog({
+      UserID,
+      LogDate,
+      LogTime,
+      Direction,
+      processed,
+    });
+
+    const savedAttendance = await newAttendance.save();
+    res.status(201).json({
+      message: 'Attendance record saved successfully',
+      data: savedAttendance,
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server Error' });
   }
 });
 
