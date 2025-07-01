@@ -1,62 +1,67 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import DocumentUploader from '../Hooks/documentUploader';
 
-const DocumentUploadSection = ({ profile, errors, onChange, isLocked }) => {
-    const documentFields = [
-        { name: 'tenthTwelfthDocs', label: '10th/12th Certificates' },
-        { name: 'graduationDocs', label: 'Graduation Documents' },
-        { name: 'postgraduationDocs', label: 'Postgraduation Documents' },
-        { name: 'experienceCertificate', label: 'Experience Certificate' },
-        { name: 'salarySlips', label: 'Salary Slips' },
-        { name: 'panCard', label: 'PAN Card' },
-        { name: 'aadharCard', label: 'Aadhar Card' },
-        { name: 'bankPassbook', label: 'Bank Passbook' },
-        { name: 'medicalCertificate', label: 'Medical Certificate' },
-        { name: 'backgroundVerification', label: 'Background Verification' },
-    ];
+const documentFields = [
+  { title: '10th & 12th Marksheets', field: 'tenthTwelfthDocs' },
+  { title: 'Graduation Certificate', field: 'graduationDocs' },
+  { title: 'Post Graduation Certificate', field: 'postgraduationDocs' },
+  { title: 'Experience Certificate', field: 'experienceCertificate' },
+  { title: 'Salary Slips', field: 'salarySlips' },
+  { title: 'PAN Card', field: 'panCard' },
+  { title: 'Aadhar Card', field: 'aadharCard' },
+  { title: 'Bank Passbook', field: 'bankPassbook' },
+  { title: 'Medical Certificate', field: 'medicalCertificate' },
+  { title: 'Background Verification Report', field: 'backgroundVerification' },
+];
 
-    return (
-        <View style={styles.container}>
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Document Uploads</Text>
-                {documentFields.map((field) => (
-                    <View key={field.name} style={styles.documentGroup}>
-                        <DocumentUploader
-                            label={field.label}
-                            name={field.name}
-                            value={profile.files?.[field.name] || null}
-                            onChange={(file) => onChange(field.name, file)}
-                            error={errors.fileErrors?.[field.name]}
-                            disabled={isLocked}
-                        />
-                    </View>
-                ))}
-            </View>
+const DocumentUploadSection = ({ profile, files, setFiles, fileErrors, isLocked }) => {
+  return (
+    <View style={styles.container}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: 80 }}
+        scrollEnabled={true}
+        bounces={true}
+        showsVerticalScrollIndicator={true}
+      >
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Document Uploads</Text>
+          {documentFields.map((doc) => (
+            <DocumentUploader
+              key={doc.field}
+              title={doc.title}
+              field={doc.field}
+              profile={profile}
+              files={files}
+              setFiles={setFiles}
+              fileErrors={fileErrors}
+              isLocked={isLocked}
+            />
+          ))}
         </View>
-    );
+      </ScrollView>
+    </View>
+  );
 };
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#fff',
-    },
-    section: {
-        padding: 16,
-        backgroundColor: '#fff',
-        borderRadius: 8,
-        marginBottom: 20,
-    },
-    sectionTitle: {
-        fontSize: 18,
-        fontWeight: '600',
-        marginBottom: 16,
-        color: '#333',
-    },
-    documentGroup: {
-        marginBottom: 16,
-    },
+  container: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  section: {
+    padding: 16,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    marginBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 16,
+    color: '#333',
+  },
 });
 
 export default DocumentUploadSection;

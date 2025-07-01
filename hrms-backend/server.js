@@ -17,7 +17,7 @@ const app = express();
 const server = http.createServer(app);
 
 const allowedOrigins = [
-  'http://192.168.1.24:5001',
+  'http://192.168.1.28:5001',
   'http://localhost:5174',
   'http://localhost:3000',
   'http://192.168.59.225:5001',
@@ -78,6 +78,7 @@ app.use('/api/punch-missed', punchMissedRouter);
 app.use('/api/payroll', payrollRouter);
 
 // MongoDB connection
+console.log('here');
 mongoose.connect(process.env.MONGO_URI)
   .then(() => {
     console.log('MongoDB connected');

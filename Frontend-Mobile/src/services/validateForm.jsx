@@ -1,6 +1,8 @@
 import { LEAVE_TYPES } from './constants';
 
 const validateBasicFields = (form) => {
+  console.log('called validateBasicFields');
+  console.log('form', form);
   if (!form.leaveType?.trim()) {
     return 'Leave Type is required';
   }
@@ -16,6 +18,7 @@ const validateBasicFields = (form) => {
   if (!form.dates.fromDuration) {
     return 'Leave Duration is required';
   }
+  console.log('here basic');
   return null;
 };
 
@@ -47,7 +50,7 @@ const validateDates = (form) => {
       return 'Session is required for half-day To Date';
     }
   }
-
+  console.log('here dates');
   return null;
 };
 
@@ -186,11 +189,12 @@ const validateLeaveType = (form, user, leaveDays, compensatoryEntries, canApplyE
       return `${form.leaveType} requires minimum ${noticeDays} working days notice`;
     }
   }
-
+  console.log('here leave type');
   return null;
 };
 
 export const validateLeaveForm = (form, user, leaveDays, compensatoryEntries, canApplyEmergencyLeave) => {
+  console.log('called validateLeaveForm');
   const basicError = validateBasicFields(form);
   if (basicError) {
     return basicError;

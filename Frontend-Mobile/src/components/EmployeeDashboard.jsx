@@ -12,7 +12,8 @@ import {
 } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { AuthContext } from '../context/AuthContext.jsx';
-import { PieChart, BarChart } from 'react-native-chart-kit';
+import { BarChart } from 'react-native-chart-kit';
+import AttendanceChart from './AttendanceChart';
 import { Dimensions } from 'react-native';
 import io from 'socket.io-client';
 import api, {fetchFileAsBlob} from '../services/api.js';
@@ -26,13 +27,12 @@ function EmployeeDashboard() {
   const [data, setData] = useState({
     attendanceData: [],
     leaveDaysTaken: { monthly: 0, yearly: 0 },
-    paidLeavesRemaining: { monthly: 0, yearly: 0 },
+    paidLeavesRemaining: 0,
     unpaidLeavesTaken: 0,
     overtimeHours: 0,
     restrictedHolidays: 0,
-    compensatoryLeaves: 0,
-    compensatoryAvailable: [],
-    otClaimRecords: [],
+    medicalLeaves: 0,
+    // compensatoryAvailable: [],
     unclaimedOTRecords: [],
   });
 
@@ -45,6 +45,7 @@ function EmployeeDashboard() {
   const [profileUri, setProfileUri] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
 
+  // Change the stauts as per updates
   const calculateAttendanceStats = useCallback(() => {
     if (!Array.isArray(data.attendanceData)) return { present: 0, absent: 0, leave: 0 };
     const stats = { present: 0, absent: 0, leave: 0, half: 0 };
@@ -57,23 +58,23 @@ function EmployeeDashboard() {
     return stats;
   }, [data.attendanceData]);
 
-
   const formatNumber = (value) => {
     const num = Number(value);
     return isNaN(num) ? 0 : num;
   };
+
   const calculateLeaveStats = useCallback(() => {
     const stats = {
-      paid: formatNumber(data.paidLeavesRemaining?.[attendanceView]),
+      paid: formatNumber(data.paidLeavesRemaining),
       unpaid: formatNumber(data.unpaidLeavesTaken),
-      compensatory: isEligible ? formatNumber(data.compensatoryLeaves) : 0,
+      medical: formatNumber(data.medicalLeaves),
       restricted: formatNumber(data.restrictedHolidays)
     };
 
     return stats;
-  }, [data, attendanceView, isEligible]);
+  }, [data]);
 
-  const handleViewToggle = useCallback(view => {
+  const handleViewToggle = useCallback((view) => {
     setAttendanceView(view);
   }, []);
 
@@ -86,23 +87,17 @@ function EmployeeDashboard() {
       setDesignation(user.designation);
 
       const employeeRes = await api.get('/dashboard/employee-info');
-      const { paidLeaves, department, employeeType, restrictedHolidays, compensatoryLeaves } = employeeRes.data;
+      const { paidLeaves, employeeType, restrictedHolidays, medicalLeaves} = employeeRes.data;
 
       const eligibleDepartments = ['Production', 'Testing', 'AMETL', 'Admin'];
-      const isDeptEligible = department && eligibleDepartments.includes(department.name);
+      const isDeptEligible = user.department.name && eligibleDepartments.includes(user.department.name);
       setIsEligible(isDeptEligible);
 
       // Get current date for reference
       const today = new Date();
       let fromDate, toDate;
 
-      if (attendanceView === 'daily') {
-        // Daily view always shows just today
-        fromDate = new Date(today);
-        toDate = new Date(today);
-        fromDate.setHours(0, 0, 0, 0);
-        toDate.setHours(23, 59, 59, 999);
-      } else if (attendanceView === 'monthly') {
+      if (attendanceView === 'monthly') {
         // Monthly view shows full month
         // If current month, limit to today
         if (today.getMonth() === new Date().getMonth()) {
@@ -129,37 +124,31 @@ function EmployeeDashboard() {
       }
 
       // Fetch attendance data with current view
-      const Records = await api.get(`/dashboard/employee-stats?attendanceView=${attendanceView}&fromDate=${fromDate.toISOString()}&toDate=${toDate.toISOString()}`);
-
-      const leaveData = await api.get(`/dashboard/employee-stats?attendanceView=yearly&fromDate=${fromDate.toISOString()}&toDate=${toDate.toISOString()}`);
+      const attendanceRecords = await api.get(`/dashboard/employee-stats?attendanceView=${attendanceView}&fromDate=${fromDate.toISOString()}&toDate=${toDate.toISOString()}`);
+      // Fetch yearly leave data
+      const yearlyFromDate = new Date(today.getFullYear(),0,1);  //Start of the year
+      const yearlyToDate = new Date(today.getFullYear(), 11, 31, 23, 59, 59, 999); //End of the year
+      const leaveData = await api.get(`/dashboard/employee-stats?attendanceView=yearly&fromDate=${yearlyFromDate.toISOString()}&toDate=${yearlyToDate.toISOString()}`);
 
       // Update state with fetched data
       const newData = {
-        attendanceData: Records.data.attendanceData || [],
-        leaveDaysTaken: {
-          monthly: leaveData.data.monthly,
-          yearly: leaveData.data.yearly
-        },
-        paidLeavesRemaining: {
-          monthly: paidLeaves,
-          yearly: employeeType === 'Confirmed' ? paidLeaves : 0,
-        },
-        unpaidLeavesTaken: leaveData.data.unpaidLeavesTaken,
-        restrictedHolidays: restrictedHolidays,
-        compensatoryLeaves: compensatoryLeaves,
-        compensatoryAvailable: leaveData.data.compensatoryAvailable || [],
+        attendanceData: attendanceRecords.data.attendanceData || [],
+        leaveDaysTaken: leaveData.data.yearly, // Using yearly leave days taken
+        paidLeavesRemaining: employeeType === 'Confirmed' ? paidLeaves : 0, // Single number value
+        unpaidLeavesTaken: leaveData.data.unpaidLeavesTaken || 0,
+        restrictedHolidays: restrictedHolidays || 0,
+        medicalLeaves: medicalLeaves || 0,
+        // compensatoryAvailable: leaveData.data.compensatoryAvailable || [],
       };
 
       if (isDeptEligible) {
         // Add OT records if eligible
-
         newData.unclaimedOTRecords = leaveData.data.unclaimedOTRecords || [];
         console.log('Fetchend unclaimed OT Records:', {
           unclaimed: newData.unclaimedOTRecords
         })
       } else {
         // Ensure empty arrays if not eligible
-        newData.otClaimRecords = [];
         newData.unclaimedOTRecords = [];
       }
 
@@ -208,9 +197,7 @@ function EmployeeDashboard() {
         const filePath = `${cacheDir}${user.profilePicture}.${extension}`;
         const fileInfo = await FileSystem.getInfoAsync(filePath);
 
-        const isCacheValid = fileInfo.exists &&
-          Date.now() - fileInfo.modificationTime * 1000 < 24 * 60 * 60 * 1000 &&
-          fileInfo.size > 0;
+        const isCacheValid = fileInfo.exists && Date.now() - fileInfo.modificationTime * 1000 < 24 * 60 * 60 * 1000 && fileInfo.size > 0;
 
         if (isCacheValid) {
           console.log('Using cached profile picture');
@@ -230,12 +217,12 @@ function EmployeeDashboard() {
     loadProfilePicture();
   }, [user?.profilePicture]);
 
-
+  // Check this if this is works and if required
   useEffect(() => {
     if (!user?.employeeId) return;
     fetchData();
 
-    const socketInstance = io(process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.9:5005/api', {
+    const socketInstance = io(process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.34:5001/api', {
       query: { employeeId: user.employeeId },
       transports: ['websocket', 'polling'],
       withCredentials: true,
@@ -277,81 +264,60 @@ function EmployeeDashboard() {
         <View style={styles.profileSection}>
           <View style={styles.profileContainer}>
             {user?.profilePicture ? (
-              <TouchableOpacity onPress={() => handleViewFile()} >
-                {profileLoading ? (
+                profileLoading ? (
                   <ActivityIndicator size="small" color="#0000ff" />
                 ) : profileUri ? (
                   <Image source={{ uri: profileUri }} style={styles.profileImage} />
                 ) : (
                   <MaterialIcons name="person" size={50} color="#666666" style={styles.defaultIcon} />
-                )}
-              </TouchableOpacity>
+                )  
             ) : (
               <MaterialIcons name="person" size={50} color="#666666" style={styles.defaultIcon} />
-            )}<View style={styles.nameContainer}>
+            )}
+            <View style={styles.nameContainer}>
               <Text style={styles.name}>{userName || user?.name}</Text>
               <Text style={styles.designation}>{designation || user?.designation}</Text>
             </View>
           </View>
         </View>
 
-        <View style={styles.viewToggleContainer}>
-          {['monthly', 'yearly'].map(view => (
-            <TouchableOpacity
-              key={view}
-              style={[styles.viewToggle, attendanceView === view && styles.viewToggleActive]}
-              onPress={() => handleViewToggle(view)}
-            >
-              <Text style={styles.viewToggleText}>{view.charAt(0).toUpperCase() + view.slice(1)}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
         <View style={styles.chartContainer}>
-          <Text style={styles.sectionTitle}>Attendance Overview</Text>
+          <View style={styles.chartHeader}>
+            <Text style={styles.sectionTitle}>Attendance Overview</Text>
+            <View style={styles.viewToggleContainer}>
+              {['monthly', 'yearly'].map(view => (
+                <TouchableOpacity
+                  key={view}
+                  style={[styles.viewToggle, attendanceView === view && styles.viewToggleActive]}
+                  onPress={() => handleViewToggle(view)}
+                >
+                  <Text style={[styles.viewToggleText, attendanceView === view && styles.viewToggleTextActive]}>
+                    {view.charAt(0).toUpperCase() + view.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
           {Array.isArray(data.attendanceData) && data.attendanceData.length > 0 ? (
-            <PieChart
-              data={[
-                { name: "Present", population: calculateAttendanceStats().present, color: "#4CAF50", legendFontColor: "#7F7F7F" },
-                { name: "Half Day", population: calculateAttendanceStats().half, color: "#FFA000", legendFontColor: "#7F7F7F" },
-                { name: "Absent", population: calculateAttendanceStats().absent, color: "#f44336", legendFontColor: "#7F7F7F" },
-                { name: "Leave", population: calculateAttendanceStats().leave, color: "#2196F3", legendFontColor: "#7F7F7F" }
-              ]}
-              width={Dimensions.get("window").width - 40}
-              height={220}
-              chartConfig={{
-                backgroundColor: "#ffffff",
-                backgroundGradientFrom: "#ffffff",
-                backgroundGradientTo: "#ffffff",
-                decimalPlaces: 0,
-                color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-              }}
-              accessor="population"
-              backgroundColor="transparent"
-              paddingLeft="15"
-              absolute
-            />
+            <AttendanceChart attendanceData={data.attendanceData} /> // Update AttendanceChart usage
           ) : (
             <View style={styles.noDataContainer}>
               <Text style={styles.noDataText}>No attendance data available</Text>
               <Button title="Refresh" onPress={fetchData} />
             </View>
           )}
-        </View>
-
-        <View style={styles.chartContainer}>
-          <Text style={styles.sectionTitle}>Leave Statistics</Text>
           {(() => {
             const stats = calculateLeaveStats();
             return (
               <BarChart
                 data={{
-                  labels: ["Paid Remaining", "Unpaid Taken", "Compensatory", "Restricted Remaining"],
+                  labels: ["Paid Remaining", "Unpaid Taken", "Medical Remaining", "Restricted Remaining"],
                   datasets: [{
                     data: [
                       stats.paid,
                       stats.unpaid,
-                      stats.compensatory,
+                      stats.medical,
                       stats.restricted
                     ]
                   }]
@@ -427,14 +393,9 @@ function EmployeeDashboard() {
                     : new Date(recordDate.setDate(recordDate.getDate() + 1)); // End of next day
 
                   const currentTime = new Date();
-                  const isBeforeDeadline = deadline > currentTime;
+                  const isBeforeDeadline = deadline >= currentTime;
 
-                  // Additional check: Don't show records from more than 30 days ago
-                  const thirtyDaysAgo = new Date();
-                  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-                  const isWithin30Days = new Date(record.date) >= thirtyDaysAgo;
-
-                  const isClaimable = hasValidHours && isBeforeDeadline && isWithin30Days;
+                  const isClaimable = hasValidHours && isBeforeDeadline;
 
                   if (isClaimable) {
                     console.log('Claimable Record:', {
@@ -444,7 +405,6 @@ function EmployeeDashboard() {
                       hoursNum: hoursNum,
                       deadline: deadline.toISOString(),
                       currentTime: currentTime.toISOString(),
-                      isWithin30Days,
                       isClaimable
                     });
                   }
@@ -506,19 +466,6 @@ function EmployeeDashboard() {
             })()}
           </View>
         )}
-
-        {loading && (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#6b21a8" />
-            <Text style={styles.loadingText}>Loading...</Text>
-          </View>
-        )}
-
-        {error && (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>{error}</Text>
-          </View>
-        )}
       </ScrollView>
     </View>
   );
@@ -552,14 +499,14 @@ const styles = StyleSheet.create({
   },
   profileImage: {
     width: 60,
-    height: 60,
-    borderRadius: 60,
+    height: 70,
+    borderRadius: 50,
     marginBottom: 20,
     marginRight: 20,
-
     marginLeft: 10,
     marginTop: 20,
     flex: 1,
+
   },
   defaultIcon: {
     width: 50,
@@ -585,22 +532,38 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#64748b',
   },
+  chartHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
   viewToggleContainer: {
     flexDirection: 'row',
-    justifyContent: 'center',
-    marginBottom: 16
+    backgroundColor: '#f1f5f9',
+    borderRadius: 8,
+    padding: 2,
   },
   viewToggle: {
-    padding: 8,
-    borderRadius: 8,
-    marginRight: 8,
-    backgroundColor: '#f8fafc'
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+    borderRadius: 6,
   },
   viewToggleActive: {
-    backgroundColor: '#6b21a8'
+    backgroundColor: '#ffffff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   viewToggleText: {
-    color: '#1e293b'
+    color: '#64748b',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  viewToggleTextActive: {
+    color: '#6b21a8',
   },
   chartContainer: {
     backgroundColor: '#ffffff',
@@ -636,13 +599,6 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  otSubtitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#6b21a8',
-    marginBottom: 10,
-    marginTop: 5,
-  },
   otRecord: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -670,36 +626,11 @@ const styles = StyleSheet.create({
     color: '#ef4444',
     marginTop: 2,
   },
-  otProject: {
-    fontSize: 12,
-    color: '#4b5563',
-    marginTop: 3,
-  },
   otRecordHours: {
     fontSize: 14,
     fontWeight: '600',
     color: '#1f2937',
     marginBottom: 3,
-  },
-  otStatus: {
-    fontSize: 12,
-    fontWeight: '500',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  statusApproved: {
-    backgroundColor: '#dcfce7',
-    color: '#166534',
-  },
-  statusRejected: {
-    backgroundColor: '#fee2e2',
-    color: '#991b1b',
-  },
-  statusPending: {
-    backgroundColor: '#fef3c7',
-    color: '#92400e',
   },
   claimButton: {
     backgroundColor: '#6b21a8',
@@ -722,16 +653,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginVertical: 8,
   },
-  shadowContainer: {
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5
-  },
   otRecord: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -745,10 +666,6 @@ const styles = StyleSheet.create({
   otRecordHours: {
     color: '#1e293b',
     fontWeight: '600'
-  },
-  loadingContainer: {
-    alignItems: 'center',
-    padding: 16
   },
   loadingText: {
     marginTop: 8,

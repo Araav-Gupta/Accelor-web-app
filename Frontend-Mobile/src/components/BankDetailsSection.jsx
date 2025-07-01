@@ -8,7 +8,6 @@ const BankDetailsSection = ({ profile, errors, onChange, isLocked }) => {
     const paymentTypeOptions = [
         { label: 'Select Payment Type', value: '' },
         { label: 'Bank Transfer', value: 'Bank Transfer' },
-        { label: 'Cheque', value: 'Cheque' },
         { label: 'Cash', value: 'Cash' },
     ];
 
@@ -45,30 +44,32 @@ const BankDetailsSection = ({ profile, errors, onChange, isLocked }) => {
                         onRequestClose={() => setShowPaymentTypePicker(false)}
                     >
                         <TouchableWithoutFeedback onPress={() => setShowPaymentTypePicker(false)}>
-                            <View style={styles.modalOverlay} />
+                            <View style={styles.modalOverlay}>
+
+                                <View style={styles.modalContent}>
+                                    {paymentTypeOptions.map((option) => (
+                                        <TouchableOpacity
+                                            key={option.value}
+                                            style={styles.option}
+                                            onPress={() => {
+                                                onChange('paymentType', option.value);
+                                                setShowPaymentTypePicker(false);
+                                            }}
+                                        >
+                                            <Text style={[
+                                                styles.optionText,
+                                                option.value === profile.paymentType && styles.selectedOption
+                                            ]}>
+                                                {option.label}
+                                            </Text>
+                                            {option.value === profile.paymentType && (
+                                                <MaterialIcons name="check" size={20} color="#007AFF" />
+                                            )}
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            </View>
                         </TouchableWithoutFeedback>
-                        <View style={styles.modalContent}>
-                            {paymentTypeOptions.map((option) => (
-                                <TouchableOpacity
-                                    key={option.value}
-                                    style={styles.option}
-                                    onPress={() => {
-                                        onChange('paymentType', option.value);
-                                        setShowPaymentTypePicker(false);
-                                    }}
-                                >
-                                    <Text style={[
-                                        styles.optionText,
-                                        option.value === profile.paymentType && styles.selectedOption
-                                    ]}>
-                                        {option.label}
-                                    </Text>
-                                    {option.value === profile.paymentType && (
-                                        <MaterialIcons name="check" size={20} color="#007AFF" />
-                                    )}
-                                </TouchableOpacity>
-                            ))}
-                        </View>
                     </Modal>
                 </View>
 
@@ -183,6 +184,8 @@ const styles = StyleSheet.create({
     modalOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     modalContent: {
         backgroundColor: '#fff',
@@ -190,7 +193,8 @@ const styles = StyleSheet.create({
         marginBottom: 20,
         borderRadius: 10,
         padding: 10,
-        maxHeight: 300,
+        width: '90%',
+        maxHeight: '70%',
     },
     option: {
         flexDirection: 'row',

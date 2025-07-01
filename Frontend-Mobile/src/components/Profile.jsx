@@ -39,8 +39,9 @@ const ProfileScreen = ({ navigation }) => {
 
     try {
       const res = await api.get(`/employees/${user.id}`);
-      setProfile({ ...res.data, statutoryDetails: res.data.statutoryDetails || {} });
+      setProfile({ ...res.data });
       setIsLocked(res.data.locked || false);
+      console.log('Profile fetched successfully:', JSON.stringify(res.data, null, 2));
     } catch (err) {
       console.error('Failed to fetch profile:', err);
       Alert.alert('Error', 'Failed to load profile');
@@ -61,7 +62,8 @@ const ProfileScreen = ({ navigation }) => {
         [parent]: { ...prev[parent], [child]: value }
       }));
     } else {
-      setProfile(prev => ({ ...prev, [field]: value }));
+      setProfile(prev => ({ ...prev, [field]: value }))
+      console.log(`change ${field} to ${value}`);
     }
     setErrors(prev => ({ ...prev, [field]: null }));
   };
@@ -104,6 +106,14 @@ const ProfileScreen = ({ navigation }) => {
       newErrors.dateOfResigning = 'Date of resigning is required';
     }
 
+    // PAN number validation (10 alphanumeric characters, uppercase)
+    if (profile.panNumber) {
+      const panNumber = profile.panNumber.trim().toUpperCase();
+      if (!/^[A-Z0-9]{10}$/.test(panNumber)) {
+      newErrors.panNumber = 'PAN Number must be 10 alphanumeric characters (e.g., ABCDE1234F)';
+      }
+    }
+
     if (profile.status === 'Working') {
       if (!profile.employeeType?.trim()) {
         newErrors.employeeType = 'Employee type is required';
@@ -130,7 +140,7 @@ const ProfileScreen = ({ navigation }) => {
     const allowedFields = [
       'name', 'mobileNumber', 'email', 'dateOfBirth', 'fatherName', 'motherName',
       'spouseName', 'gender', 'maritalStatus', 'bloodGroup', 'aadharNumber',
-      'panNumber', 'permanentAddress', 'currentAddress', 'emergencyContactName',
+      'panNumber','pfNumber','esicNumber', 'uanNumber', 'permanentAddress', 'currentAddress', 'emergencyContactName',
       'emergencyContactNumber', 'dateOfJoining', 'dateOfResigning', 'status',
       'employeeType', 'probationPeriod', 'confirmationDate', 'designation',
       'reportingManager', 'location', 'referredBy', 'basicInfoLocked',
@@ -140,12 +150,26 @@ const ProfileScreen = ({ navigation }) => {
 
     // Only include allowed fields and handle special cases
     allowedFields.forEach(field => {
-      if (profile[field] === undefined || profile[field] === null) {
-        return;
+      if (profile[field] === undefined || profile[field] === null || profile[field] === '') {
+        return; // Skip undefined, null, or empty string values
       }
 
+      // Handle date fields - ensure they're valid dates
+      if ((field === 'dateOfBirth' || field === 'dateOfJoining' || field === 'dateOfResigning' || field === 'confirmationDate') && profile[field]) {
+        const date = new Date(profile[field]);
+        if (!isNaN(date.getTime())) {
+          cleanData[field] = date.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+        }
+        return;
+      }
+      
       // Handle department and reportingManager specially - extract just the ID if it's an object
       if (field === 'department' || field === 'reportingManager') {
+        // Skip if reportingManager is an empty string
+        if (field === 'reportingManager' && profile[field] === '') {
+          return;
+        }
+        
         if (typeof profile[field] === 'object' && profile[field] !== null) {
           cleanData[field] = profile[field]._id || profile[field];
         } else if (typeof profile[field] === 'string' && profile[field].includes('_id')) {
@@ -154,10 +178,12 @@ const ProfileScreen = ({ navigation }) => {
             const parsed = JSON.parse(profile[field]);
             cleanData[field] = parsed._id || parsed;
           } catch (e) {
-            // If parsing fails, use the value as is
-            cleanData[field] = profile[field];
+            // If parsing fails, use the value as is if it's not empty
+            if (profile[field].trim() !== '') {
+              cleanData[field] = profile[field];
+            }
           }
-        } else {
+        } else if (profile[field].trim() !== '') {
           cleanData[field] = profile[field];
         }
       } else {

@@ -138,24 +138,25 @@ const syncAttendance = async () => {
 
       const leave = await Leave.findOne({
         employeeId: employee.employeeId,
-        'halfDay.date': logDate,
-        'status.ceo': 'Approved',
+        'fullDay.from': logDate,
+        'status.ceo': { $in: ['Pending', 'Approved'] },
+        'status.hod': { $in: ['Pending', 'Approved'] },
       });
 
-      if (leave && leave.halfDay.session === 'forenoon') {
+      if (leave && leave.fullDay.fromSession === 'forenoon') {
         const afternoonPunch = logs.find(log => log.LogTime >= '13:30:00');
         if (afternoonPunch) {
           timeIn = afternoonPunch.LogTime;
           status = 'Half Day';
-          halfDay = 'Second Half';
+          halfDay = 'First Half';
         } else {
           continue;
         }
-      } else if (leave && leave.halfDay.session === 'afternoon') {
+      } else if (leave && leave.fullDay.fromSession === 'afternoon') {
         const morningPunch = logs.find(log => log.LogTime <= '13:30:00');
         if (morningPunch) {
           status = 'Half Day';
-          halfDay = 'First Half';
+          halfDay = 'Second Half';
         } else {
           continue;
         }

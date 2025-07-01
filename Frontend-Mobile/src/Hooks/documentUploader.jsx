@@ -1,42 +1,21 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import { fetchFileAsBlob, openFile } from '../services/api';
+import { useFileHandler } from './useFileHandler';
 
 const DocumentUploader = ({
   title,
   field,
-  profile,
   files,
   setFiles,
   fileErrors,
   isLocked,
 }) => {
-  const [localError, setLocalError] = useState(null);
-
-  const sizeLimits = {
-    salarySlips: 1, // 1MB
-    panCard: 1,
-    aadharCard: 1,
-    bankPassbook: 1,
-    medicalCertificate: 2, // 2MB
-    backgroundVerification: 2,
-    tenthTwelfthDocs: 5, // 5MB
-    graduationDocs: 5,
-    postgraduationDocs: 5,
-    experienceCertificate: 5,
-  };
+  const selectedFile = files?.[field];
+  const { handleViewFile, isLoading } = useFileHandler({ localFile: selectedFile });
 
   const handleDocumentPick = async () => {
-    if (isLocked) return;
-
-    // Check salarySlips dependency
-    if (field === 'salarySlips' && !profile.documents?.experienceCertificate && !files?.experienceCertificate) {
-      setLocalError('Please upload Experience Certificate first');
-      return;
-    }
-
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: 'application/pdf',
@@ -44,46 +23,16 @@ const DocumentUploader = ({
       });
 
       if (!result.canceled) {
-        const asset = result.assets[0];
-        const sizeMB = asset.size / (1024 * 1024); // Convert bytes to MB
-        const maxSize = sizeLimits[field] || 5; // Default to 5MB
-
-        if (sizeMB > maxSize) {
-          setLocalError(`File size must be less than ${maxSize}MB`);
-          return;
-        }
-
         const file = {
-          uri: asset.uri,
+          uri: result.assets[0].uri,
           type: 'application/pdf',
-          name: asset.name,
-          size: asset.size,
+          name: result.assets[0].name || 'document.pdf',
         };
         setFiles((prev) => ({ ...prev, [field]: file }));
-        setLocalError(null);
       }
     } catch (err) {
       console.error('Document pick error:', err);
-      setLocalError('Failed to pick document');
-    }
-  };
-
-  const [loading, setLoading] = useState(false);
-  const hasExistingFile = profile?.documents?.[field];
-  const selectedFile = files?.[field];
-
-  const handleViewFile = async (fileId, fileName) => {
-    if (!fileId) return;
-
-    try {
-      setLoading(true);
-      const fileUri = await fetchFileAsBlob(fileId, fileName || 'document.pdf');
-      await openFile(fileUri);
-    } catch (error) {
-      console.error('Error opening file:', error);
-      Alert.alert('Error', 'Could not open the file. Please try again.');
-    } finally {
-      setLoading(false);
+      Alert.alert('Error', 'Something went wrong while picking the document.');
     }
   };
 
@@ -101,13 +50,13 @@ const DocumentUploader = ({
           <Text style={styles.buttonText}>Upload PDF</Text>
         </TouchableOpacity>
 
-        {hasExistingFile && (
+        {selectedFile && (
           <TouchableOpacity
             style={[styles.button, styles.viewButton]}
-            onPress={() => handleViewFile(hasExistingFile, title)}
-            disabled={loading}
+            onPress={handleViewFile}
+            disabled={isLoading}
           >
-            {loading ? (
+            {isLoading ? (
               <ActivityIndicator color="#fff" size="small" />
             ) : (
               <>
@@ -120,12 +69,7 @@ const DocumentUploader = ({
       </View>
 
       {selectedFile && <Text style={styles.fileName}>{selectedFile.name}</Text>}
-      {hasExistingFile && !selectedFile && (
-        <Text style={styles.fileName}>File ID: {hasExistingFile}</Text>
-      )}
-      {(fileErrors?.[field] || localError) && (
-        <Text style={styles.error}>{fileErrors?.[field] || localError}</Text>
-      )}
+      {fileErrors?.[field] && <Text style={styles.error}>{fileErrors[field]}</Text>}
     </View>
   );
 };

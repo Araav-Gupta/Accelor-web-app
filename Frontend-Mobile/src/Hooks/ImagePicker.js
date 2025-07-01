@@ -1,4 +1,3 @@
-// hooks/useImagePicker.js
 import * as ImagePicker from 'expo-image-picker';
 import { Alert } from 'react-native';
 
@@ -22,8 +21,8 @@ export const useImagePicker = ({ setProfile, setFiles }) => {
         const asset = result.assets[0];
         const imageFile = {
           uri: asset.uri,
-          type: 'image/jpeg', // or asset.type if available
-          name: asset.fileName || 'profile.jpg'
+          type: 'image/jpeg',
+          name: asset.fileName || 'image.jpg',
         };
 
         setProfile(prev => ({ ...prev, profilePicture: asset.uri }));

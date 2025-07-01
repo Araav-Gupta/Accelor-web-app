@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView, Modal, TouchableWithoutFeedback, ActivityIndicator, Image } from 'react-native';
+import { View, Text, TextInput, StyleSheet, ScrollView, TouchableOpacity, Modal, TouchableWithoutFeedback, ActivityIndicator, Image } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as FileSystem from 'expo-file-system';
@@ -7,28 +7,21 @@ import { fetchFileAsBlob } from '../services/api';
 
 const formatDate = (dateInput) => {
     if (!dateInput) return '';
-
-    // If already in YYYY-MM-DD format, return as is
     if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
         return dateInput;
     }
-
-    // Create Date object from input
     const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
-
-    // Return empty string if date is invalid
     if (isNaN(date.getTime())) return '';
-
-    // Format to YYYY-MM-DD using Intl.DateTimeFormat for reliability
     return date.toISOString().split('T')[0];
 };
 
 const BasicInfoSection = ({ profile, errors, onChange, onImagePick, isLocked }) => {
     const [showDatePicker, setShowDatePicker] = useState(false);
+    const [showDateOfJoiningPicker, setShowDateOfJoiningPicker] = useState(false);
     const [showGenderPicker, setShowGenderPicker] = useState(false);
     const [showBloodGroupPicker, setShowBloodGroupPicker] = useState(false);
     const [showMaritalStatusPicker, setShowMaritalStatusPicker] = useState(false);
-    const [showEmploymentStatusPicker, setShowEmploymentStatusPicker] = useState(false);
+    const [showStatusPicker, setShowStatusPicker] = useState(false);
     const [profileUri, setProfileUri] = useState(null);
     const [profileLoading, setProfileLoading] = useState(false);
 
@@ -38,25 +31,27 @@ const BasicInfoSection = ({ profile, errors, onChange, onImagePick, isLocked }) 
         { label: 'Female', value: 'Female' },
         { label: 'Other', value: 'Other' },
     ];
-
-    const selectedGender = genderOptions.find(opt => opt.value === profile.gender) || genderOptions[0];
-
-    const bloodGroups = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
-    const selectedBloodGroup = profile.bloodGroup ? profile.bloodGroup : 'Select Blood Group';
-
+    const bloodGroups = [
+        { label: 'Select Blood Group', value: '' },
+        { label: 'A+', value: 'A+' },
+        { label: 'A-', value: 'A-' },
+        { label: 'B+', value: 'B+' },
+        { label: 'B-', value: 'B-' },
+        { label: 'AB+', value: 'AB+' },
+        { label: 'AB-', value: 'AB-' },
+        { label: 'O+', value: 'O+' },
+        { label: 'O-', value: 'O-' },
+    ];
     const maritalStatusOptions = [
         { label: 'Select', value: '' },
         { label: 'Single', value: 'Single' },
         { label: 'Married', value: 'Married' },
     ];
-    const selectedMaritalStatus = maritalStatusOptions.find(opt => opt.value === profile.maritalStatus) || maritalStatusOptions[0];
-
-    const employmentStatusOptions = [
+    const statusOptions = [
         { label: 'Select Status', value: '' },
         { label: 'Working', value: 'Working' },
         { label: 'Resigned', value: 'Resigned' },
     ];
-    const selectedEmploymentStatus = employmentStatusOptions.find(opt => opt.value === profile.employmentStatus) || employmentStatusOptions[0];
 
     const fields = [
         { label: 'Full Name', name: 'name', keyboardType: 'default' },
@@ -77,10 +72,9 @@ const BasicInfoSection = ({ profile, errors, onChange, onImagePick, isLocked }) 
         const loadProfilePicture = async () => {
             if (!profile?.profilePicture) return;
             setProfileLoading(true);
-
             try {
                 const cacheDir = `${FileSystem.cacheDirectory}downloaded_files/`;
-                const extension = 'jpg'; // or png if you're using that
+                const extension = 'jpg';
                 const filePath = `${cacheDir}${profile.profilePicture}.${extension}`;
                 const fileInfo = await FileSystem.getInfoAsync(filePath);
 
@@ -102,9 +96,57 @@ const BasicInfoSection = ({ profile, errors, onChange, onImagePick, isLocked }) 
                 setProfileLoading(false);
             }
         };
-
         loadProfilePicture();
     }, [profile?.profilePicture]);
+
+    const renderDropdown = (label, field, options, showPicker, setShowPicker) => (
+        <View style={styles.inputGroup}>
+            <Text style={styles.label}>{label}</Text>
+            <TouchableOpacity
+                style={[styles.dropdownContainer, errors[field] && styles.inputError]}
+                onPress={() => !isLocked && setShowPicker(true)}
+                disabled={isLocked}
+            >
+                <Text style={styles.dropdownText}>
+                    {options.find(opt => opt.value === profile[field])?.label || `Select ${label.toLowerCase()}`}
+                </Text>
+                <MaterialIcons name="arrow-drop-down" size={24} color="#666" />
+            </TouchableOpacity>
+            {errors[field] && <Text style={styles.errorText}>{errors[field]}</Text>}
+            <Modal
+                visible={showPicker}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setShowPicker(false)}
+            >
+                <TouchableWithoutFeedback onPress={() => setShowPicker(false)}>
+                    <View style={styles.modalOverlay}>
+                        <View style={styles.modalContent}>
+                            <ScrollView>
+                                {options.map((option) => (
+                                    <TouchableOpacity
+                                        key={option.value}
+                                        style={styles.option}
+                                        onPress={() => {
+                                            onChange(field, option.value);
+                                            setShowPicker(false);
+                                        }}
+                                    >
+                                        <Text style={[
+                                            styles.optionText,
+                                            option.value === profile[field] && styles.selectedOption
+                                        ]}>
+                                            {option.label}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </ScrollView>
+                        </View>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
+        </View>
+    );
 
     return (
         <View style={styles.container}>
@@ -113,7 +155,8 @@ const BasicInfoSection = ({ profile, errors, onChange, onImagePick, isLocked }) 
                 contentContainerStyle={{ flexGrow: 1 }}
                 scrollEnabled={true}
                 bounces={true}
-                showsVerticalScrollIndicator={true}>
+                showsVerticalScrollIndicator={true}
+            >
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Basic Information</Text>
 
@@ -138,7 +181,7 @@ const BasicInfoSection = ({ profile, errors, onChange, onImagePick, isLocked }) 
                             <Text style={styles.label}>{field.label}</Text>
                             <TextInput
                                 style={[styles.input, errors[field.name] && styles.inputError]}
-                                value={profile[field.name]}
+                                value={profile[field.name] || ''}
                                 onChangeText={(text) => onChange(field.name, text)}
                                 keyboardType={field.keyboardType}
                                 editable={!isLocked}
@@ -175,235 +218,35 @@ const BasicInfoSection = ({ profile, errors, onChange, onImagePick, isLocked }) 
                     </View>
 
                     <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Gender</Text>
-                        <TouchableOpacity
-                            style={[styles.dropdownContainer, errors.gender && styles.inputError]}
-                            onPress={() => !isLocked && setShowGenderPicker(true)}
-                            disabled={isLocked}
-                        >
-                            <Text style={styles.dropdownText}>
-                                {selectedGender.label}
-                            </Text>
-                            <MaterialIcons name="arrow-drop-down" size={24} color="#666" />
-                        </TouchableOpacity>
-                        {errors.gender && <Text style={styles.errorText}>{errors.gender}</Text>}
-
-                        <Modal
-                            visible={showGenderPicker}
-                            transparent={true}
-                            animationType="fade"
-                            onRequestClose={() => setShowGenderPicker(false)}
-                        >
-                            <TouchableWithoutFeedback onPress={() => setShowGenderPicker(false)}>
-                                <View style={styles.modalOverlay} />
-                            </TouchableWithoutFeedback>
-                            <View style={styles.modalContent}>
-                                {genderOptions.map((option) => (
-                                    <TouchableOpacity
-                                        key={option.value}
-                                        style={styles.option}
-                                        onPress={() => {
-                                            onChange('gender', option.value);
-                                            setShowGenderPicker(false);
-                                        }}
-                                    >
-                                        <Text style={[
-                                            styles.optionText,
-                                            option.value === profile.gender && styles.selectedOption
-                                        ]}>
-                                            {option.label}
-                                        </Text>
-                                        {option.value === profile.gender && (
-                                            <MaterialIcons name="check" size={20} color="#007AFF" />
-                                        )}
-                                    </TouchableOpacity>
-                                ))}
-                            </View>
-                        </Modal>
-                    </View>
-
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Blood Group</Text>
-                        <TouchableOpacity
-                            style={[styles.dropdownContainer, errors.bloodGroup && styles.inputError]}
-                            onPress={() => !isLocked && setShowBloodGroupPicker(true)}
-                            disabled={isLocked}
-                        >
-                            <Text style={styles.dropdownText}>
-                                {profile.bloodGroup || 'Select Blood Group'}
-                            </Text>
-                            <MaterialIcons name="arrow-drop-down" size={24} color="#666" />
-                        </TouchableOpacity>
-                        {errors.bloodGroup && <Text style={styles.errorText}>{errors.bloodGroup}</Text>}
-
-                        <Modal
-                            visible={showBloodGroupPicker}
-                            transparent={true}
-                            animationType="fade"
-                            onRequestClose={() => setShowBloodGroupPicker(false)}
-                        >
-                            <TouchableWithoutFeedback onPress={() => setShowBloodGroupPicker(false)}>
-                                <View style={styles.modalOverlay} />
-                            </TouchableWithoutFeedback>
-                            <View style={styles.modalContent}>
-                                {['', ...bloodGroups].map((bg) => (
-                                    <TouchableOpacity
-                                        key={bg || 'select'}
-                                        style={styles.option}
-                                        onPress={() => {
-                                            onChange('bloodGroup', bg);
-                                            setShowBloodGroupPicker(false);
-                                        }}
-                                    >
-                                        <Text style={[
-                                            styles.optionText,
-                                            bg === profile.bloodGroup && styles.selectedOption
-                                        ]}>
-                                            {bg || 'Select Blood Group'}
-                                        </Text>
-                                        {bg === profile.bloodGroup && (
-                                            <MaterialIcons name="check" size={20} color="#007AFF" />
-                                        )}
-                                    </TouchableOpacity>
-                                ))}
-                            </View>
-                        </Modal>
-                    </View>
-
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Marital Status</Text>
-                        <TouchableOpacity
-                            style={[styles.dropdownContainer, errors.maritalStatus && styles.inputError]}
-                            onPress={() => !isLocked && setShowMaritalStatusPicker(true)}
-                            disabled={isLocked}
-                        >
-                            <Text style={styles.dropdownText}>
-                                {selectedMaritalStatus.label}
-                            </Text>
-                            <MaterialIcons name="arrow-drop-down" size={24} color="#666" />
-                        </TouchableOpacity>
-                        {errors.maritalStatus && <Text style={styles.errorText}>{errors.maritalStatus}</Text>}
-
-                        <Modal
-                            visible={showMaritalStatusPicker}
-                            transparent={true}
-                            animationType="fade"
-                            onRequestClose={() => setShowMaritalStatusPicker(false)}
-                        >
-                            <TouchableWithoutFeedback onPress={() => setShowMaritalStatusPicker(false)}>
-                                <View style={styles.modalOverlay} />
-                            </TouchableWithoutFeedback>
-                            <View style={styles.modalContent}>
-                                {maritalStatusOptions.map((option) => (
-                                    <TouchableOpacity
-                                        key={option.value}
-                                        style={styles.option}
-                                        onPress={() => {
-                                            onChange('maritalStatus', option.value);
-                                            setShowMaritalStatusPicker(false);
-                                        }}
-                                    >
-                                        <Text style={[
-                                            styles.optionText,
-                                            option.value === profile.maritalStatus && styles.selectedOption
-                                        ]}>
-                                            {option.label}
-                                        </Text>
-                                        {option.value === profile.maritalStatus && (
-                                            <MaterialIcons name="check" size={20} color="#007AFF" />
-                                        )}
-                                    </TouchableOpacity>
-                                ))}
-                            </View>
-                        </Modal>
-                    </View>
-
-                    {profile.maritalStatus === 'Married' && (
-                        <View style={styles.inputGroup}>
-                            <Text style={styles.label}>Spouse Name</Text>
-                            <TextInput
-                                style={[styles.input, errors.spouseName && styles.inputError]}
-                                value={profile.spouseName || ''}
-                                onChangeText={(text) => onChange('spouseName', text)}
-                                keyboardType="default"
-                                editable={!isLocked}
-                                placeholder="Enter spouse name"
-                            />
-                            {errors.spouseName && <Text style={styles.errorText}>{errors.spouseName}</Text>}
-                        </View>
-                    )}
-
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Employment Status</Text>
-                        <TouchableOpacity
-                            style={[styles.dropdownContainer, errors.employmentStatus && styles.inputError]}
-                            onPress={() => !isLocked && setShowEmploymentStatusPicker(true)}
-                            disabled={isLocked}
-                        >
-                            <Text style={styles.dropdownText}>
-                                {selectedEmploymentStatus.label}
-                            </Text>
-                            <MaterialIcons name="arrow-drop-down" size={24} color="#666" />
-                        </TouchableOpacity>
-                        {errors.employmentStatus && <Text style={styles.errorText}>{errors.employmentStatus}</Text>}
-
-                        <Modal
-                            visible={showEmploymentStatusPicker}
-                            transparent={true}
-                            animationType="fade"
-                            onRequestClose={() => setShowEmploymentStatusPicker(false)}
-                        >
-                            <TouchableWithoutFeedback onPress={() => setShowEmploymentStatusPicker(false)}>
-                                <View style={styles.modalOverlay} />
-                            </TouchableWithoutFeedback>
-                            <View style={styles.modalContent}>
-                                {employmentStatusOptions.map((option) => (
-                                    <TouchableOpacity
-                                        key={option.value}
-                                        style={styles.option}
-                                        onPress={() => {
-                                            onChange('employmentStatus', option.value);
-                                            setShowEmploymentStatusPicker(false);
-                                        }}
-                                    >
-                                        <Text style={[
-                                            styles.optionText,
-                                            option.value === profile.employmentStatus && styles.selectedOption
-                                        ]}>
-                                            {option.label}
-                                        </Text>
-                                        {option.value === profile.employmentStatus && (
-                                            <MaterialIcons name="check" size={20} color="#007AFF" />
-                                        )}
-                                    </TouchableOpacity>
-                                ))}
-                            </View>
-                        </Modal>
-                    </View>
-
-                    <View style={styles.inputGroup}>
                         <Text style={styles.label}>Date of Joining</Text>
-                        <TextInput
-                            style={[styles.input, errors.dateOfJoining && styles.inputError]}
-                            value={formatDate(profile.dateOfJoining)}
-                            onChangeText={(text) => onChange('dateOfJoining', text)}
-                            editable={!isLocked}
-                            placeholder="YYYY-MM-DD"
-                        />
+                        <TouchableOpacity
+                            onPress={() => !isLocked && setShowDateOfJoiningPicker(true)}
+                            style={[styles.input, styles.dateInput, errors.dateOfJoining && styles.inputError]}
+                        >
+                            <Text style={{ color: profile.dateOfJoining ? '#000' : '#aaa' }}>
+                                {profile.dateOfJoining ? formatDate(profile.dateOfJoining) : 'Select date of joining'}
+                            </Text>
+                        </TouchableOpacity>
+                        {showDateOfJoiningPicker && (
+                            <DateTimePicker
+                                value={profile.dateOfJoining ? new Date(profile.dateOfJoining) : new Date()}
+                                mode="date"
+                                display="default"
+                                onChange={(event, selectedDate) => {
+                                    setShowDateOfJoiningPicker(false);
+                                    if (selectedDate) {
+                                        onChange('dateOfJoining', selectedDate.toISOString().split('T')[0]);
+                                    }
+                                }}
+                            />
+                        )}
                         {errors.dateOfJoining && <Text style={styles.errorText}>{errors.dateOfJoining}</Text>}
                     </View>
 
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Status</Text>
-                        <TextInput
-                            style={[styles.input, errors.status && styles.inputError]}
-                            value={profile.status}
-                            onChangeText={(text) => onChange('status', text)}
-                            editable={!isLocked}
-                            placeholder="Enter Status"
-                        />
-                        {errors.status && <Text style={styles.errorText}>{errors.status}</Text>}
-                    </View>
+                    {renderDropdown('Gender', 'gender', genderOptions, showGenderPicker, setShowGenderPicker)}
+                    {renderDropdown('Blood Group', 'bloodGroup', bloodGroups, showBloodGroupPicker, setShowBloodGroupPicker)}
+                    {renderDropdown('Marital Status', 'maritalStatus', maritalStatusOptions, showMaritalStatusPicker, setShowMaritalStatusPicker)}
+                    {renderDropdown('Status', 'status', statusOptions, showStatusPicker, setShowStatusPicker)}
                 </View>
             </ScrollView>
         </View>
@@ -437,10 +280,6 @@ const styles = StyleSheet.create({
         backgroundColor: '#f8fafc',
         justifyContent: 'center',
     },
-    scrollContent: {
-        padding: 16,
-        paddingBottom: 100, // Extra space for the save button
-    },
     section: {
         padding: 16,
         backgroundColor: '#fff',
@@ -473,35 +312,42 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         borderWidth: 1,
-        borderColor: '#ddd',
-        borderRadius: 5,
-        padding: 12,
-        marginBottom: 5,
-        backgroundColor: '#fff',
+        borderColor: '#ccc',
+        borderRadius: 6,
+        padding: 10,
+        backgroundColor: '#f9f9f9',
     },
     dropdownText: {
         fontSize: 16,
         color: '#333',
+        flex: 1,
     },
     modalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        backgroundColor: 'rgba(0, 0, 0, 0.3)',
+        maxHeight: '100%',
+        width: '100%',
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     modalContent: {
         backgroundColor: '#fff',
-        marginHorizontal: 20,
-        marginBottom: 20,
-        borderRadius: 10,
-        padding: 10,
-        maxHeight: 300,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#ccc',
+        padding: 8,
+        maxHeight: '70%',
+        width: '90%',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 4,
+        elevation: 5,
     },
     option: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
         padding: 12,
         borderBottomWidth: 1,
-        borderBottomColor: '#f0f0f0',
+        borderBottomColor: '#eee',
     },
     optionText: {
         fontSize: 16,
@@ -514,20 +360,10 @@ const styles = StyleSheet.create({
     inputError: {
         borderColor: 'red',
     },
-    pickerContainer: {
-        borderWidth: 1,
-        borderColor: '#ccc',
-        borderRadius: 6,
-        backgroundColor: '#f9f9f9',
-    },
     errorText: {
         color: 'red',
         fontSize: 12,
         marginTop: 4,
-    },
-    imagePicker: {
-        alignSelf: 'center',
-        marginBottom: 20,
     },
     dateInput: {
         justifyContent: 'center',

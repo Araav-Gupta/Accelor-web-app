@@ -1,16 +1,25 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Menu } from 'react-native-paper';
 import { LEAVE_TYPES, eligibleDepartments } from './constants';
+import { AuthContext } from '../context/AuthContext';
 
 const LeaveTypeSelector = React.memo(({ leaveType, setLeaveType, canApplyEmergencyLeave, leaveTypeVisible, setLeaveTypeVisible, userDepartment, error }) => {
   // Filter leave types based on conditions
+  const { user } = useContext(AuthContext);
   const filteredLeaveTypes = (() => {
     let types = [...LEAVE_TYPES];
     
     // Remove Emergency leave if not eligible
     if (!canApplyEmergencyLeave) {
       types = types.filter(type => type !== 'Emergency');
+    }
+
+    // Show the the leave type according to gender
+    if (user.gender === 'Female') {
+      types = types.filter(type => type !== 'Paternity');
+    } else if ( user.gender === 'Male') {
+      types = types.filter(type => type !== 'Maternity');
     }
     
     // Remove Compensatory leave if user is in eligible department

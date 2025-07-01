@@ -30,10 +30,11 @@ const LeaveRecordsTable = React.memo(({ leaveRecords, selectedRecord, setSelecte
     setIsImageViewerVisible, 
     imageUri,
     isLoading: isFileLoading
-  } = useFileHandler(
-    selectedRecord?.medicalCertificate?._id,
-    selectedRecord?.medicalCertificate?.filename
-  );
+  } = useFileHandler({
+    fileId: selectedRecord?.medicalCertificate?._id,
+    fileName: selectedRecord?.medicalCertificate?.filename,
+    localFile: null
+  });
 
   const onViewFile = useCallback(async () => {
     if (selectedRecord?.medicalCertificate?._id) {

@@ -2,12 +2,6 @@ import React from 'react';
 import { View, Text, TextInput, StyleSheet } from 'react-native';
 
 const StatutoryDetailsSection = ({ profile, errors, onChange, isLocked }) => {
-    const handleStatutoryDetailsChange = (field, value) => {
-        onChange('statutoryDetails', {
-            ...profile.statutoryDetails,
-            [field]: value,
-        });
-    };
 
     return (
         <View style={styles.container}>
@@ -17,49 +11,49 @@ const StatutoryDetailsSection = ({ profile, errors, onChange, isLocked }) => {
                 <View style={styles.inputGroup}>
                     <Text style={styles.label}>PAN Number</Text>
                     <TextInput
-                        style={[styles.input, errors.statutoryDetails?.panNumber && styles.inputError]}
-                        value={profile.statutoryDetails?.panNumber || ''}
-                        onChangeText={(text) => handleStatutoryDetailsChange('panNumber', text)}
+                        style={[styles.input, errors.panNumber && styles.inputError]}
+                        value={profile.panNumber || ''}
+                        onChangeText={(text) => onChange('panNumber', text)}
                         placeholder="Enter PAN number"
                         editable={!isLocked}
                     />
-                    {errors.statutoryDetails?.panNumber && <Text style={styles.errorText}>{errors.statutoryDetails.panNumber}</Text>}
+                    {errors.panNumber && <Text style={styles.errorText}>{errors.panNumber}</Text>}
                 </View>
 
                 <View style={styles.inputGroup}>
                     <Text style={styles.label}>PF Number</Text>
                     <TextInput
-                        style={[styles.input, errors.statutoryDetails?.pfNumber && styles.inputError]}
-                        value={profile.statutoryDetails?.pfNumber || ''}
-                        onChangeText={(text) => handleStatutoryDetailsChange('pfNumber', text)}
+                        style={[styles.input, errors.pfNumber && styles.inputError]}
+                        value={profile.pfNumber || ''}
+                        onChangeText={(text) => onChange('pfNumber', text)}
                         placeholder="Enter PF number"
                         editable={!isLocked}
                     />
-                    {errors.statutoryDetails?.pfNumber && <Text style={styles.errorText}>{errors.statutoryDetails.pfNumber}</Text>}
+                    {errors.pfNumber && <Text style={styles.errorText}>{errors.pfNumber}</Text>}
                 </View>
 
                 <View style={styles.inputGroup}>
                     <Text style={styles.label}>UAN Number</Text>
                     <TextInput
-                        style={[styles.input, errors.statutoryDetails?.uanNumber && styles.inputError]}
-                        value={profile.statutoryDetails?.uanNumber || ''}
-                        onChangeText={(text) => handleStatutoryDetailsChange('uanNumber', text)}
+                        style={[styles.input, errors.uanNumber && styles.inputError]}
+                        value={profile.uanNumber || ''}
+                        onChangeText={(text) => onChange('uanNumber', text)}
                         placeholder="Enter UAN number"
                         editable={!isLocked}
                     />
-                    {errors.statutoryDetails?.uanNumber && <Text style={styles.errorText}>{errors.statutoryDetails.uanNumber}</Text>}
+                    {errors.uanNumber && <Text style={styles.errorText}>{errors.uanNumber}</Text>}
                 </View>
 
                 <View style={styles.inputGroup}>
                     <Text style={styles.label}>ESIC Number</Text>
                     <TextInput
-                        style={[styles.input, errors.statutoryDetails?.esicNumber && styles.inputError]}
-                        value={profile.statutoryDetails?.esicNumber || ''}
-                        onChangeText={(text) => handleStatutoryDetailsChange('esicNumber', text)}
+                        style={[styles.input, errors.esicNumber && styles.inputError]}
+                        value={profile.esicNumber || ''}
+                        onChangeText={(text) => onChange('esicNumber', text)}
                         placeholder="Enter ESIC number"
                         editable={!isLocked}
                     />
-                    {errors.statutoryDetails?.esicNumber && <Text style={styles.errorText}>{errors.statutoryDetails.esicNumber}</Text>}
+                    {errors.esicNumber && <Text style={styles.errorText}>{errors.esicNumber}</Text>}
                 </View>
             </View>
         </View>

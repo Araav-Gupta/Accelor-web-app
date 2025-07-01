@@ -23,7 +23,7 @@ const leaveSchema = new mongoose.Schema({
     required: true
   },
 
-  fullDay: {
+  dates: {
     from: { type: Date, required: true },
     to: { type: Date },
     fromDuration: { type: String, enum: ['full', 'half'], default: 'full' },

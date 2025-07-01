@@ -220,6 +220,7 @@ router.get('/employee-info', auth, role(['Employee', 'HOD', 'Admin']), async (re
       department: employee.department,
       designation: employee.designation,
       canApplyEmergencyLeave:employee.canApplyEmergencyLeave,
+      medicalLeaves: employee.medicalLeaves,
     });
   } catch (err) {
     console.error('Error fetching employee info:', err);

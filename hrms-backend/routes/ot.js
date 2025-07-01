@@ -25,14 +25,14 @@ router.post('/', auth, role(['Employee', 'HOD', 'Admin']), async (req, res) => {
     }
 
     const { date, hours, projectDetails, claimType } = req.body;
-    if (!date || !hours || !projectDetails) {
-      return res.status(400).json({ error: 'Date, hours, and project details are required' });
+    if (!date || !hours || !projectDetails || !claimType) {
+      return res.status(400).json({ error: 'Date, hours, project details, and claim type are required' });
     }
 
     const otDate = new Date(date);
     if (isNaN(otDate.getTime())) return res.status(400).json({ error: 'Invalid date' });
-    if (hours <= 0 || hours > 24) return res.status(400).json({ error: 'Hours must be between 0 and 24' });
     if (hours < 1) return res.status(400).json({ error: 'Hours must be at least 1' });
+    if (hours > 24) return res.status(400).json({ error: 'Hours must be between 1 and 24' });
 
     const normalizeDate = (d) => {
       const date = new Date(d);
@@ -50,8 +50,7 @@ router.post('/', auth, role(['Employee', 'HOD', 'Admin']), async (req, res) => {
 
     const eligibleDepartments = ['Production', 'Mechanical', 'AMETL'];
     const eligibleDesignations = ['Technician', 'Sr. Technician', 'Junior Engineer'];
-    const isEligible = eligibleDepartments.includes(user.department.name) &&
-    eligibleDesignations.includes(user.designation);
+    const isEligible = eligibleDepartments.includes(user.department.name) && eligibleDesignations.includes(user.designation);
     const isSunday = otDate.getDay() === 0;
 
     let attendanceRecord = await Attendance.findOne({

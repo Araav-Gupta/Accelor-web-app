@@ -1,388 +1,366 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, Switch, Modal, TouchableWithoutFeedback, ActivityIndicator, ScrollView, Alert
-
- } from 'react-native';
-import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import {
+    View,
+    Text,
+    TextInput,
+    StyleSheet,
+    ScrollView,
+    TouchableOpacity,
+    Modal,
+    TouchableWithoutFeedback,
+    Switch,
+    Alert,
+    ActivityIndicator
+} from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import api from '../services/api';
 
 const formatDate = (dateInput) => {
     if (!dateInput) return '';
-
     if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
         return dateInput;
     }
-
     const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
     if (isNaN(date.getTime())) return '';
     return date.toISOString().split('T')[0];
 };
 
 const EmploymentDetailsSection = ({ profile, errors, onChange, isLocked, user, employeeId }) => {
-    const [showResigningDatePicker, setShowResigningDatePicker] = useState(false);
-    const [showConfirmationDatePicker, setShowConfirmationDatePicker] = useState(false);
-    const [showManagerPicker, setShowManagerPicker] = useState(false);
-    const [showDepartmentPicker, setShowDepartmentPicker] = useState(false);
-    const [showEmployeeTypePicker, setShowEmployeeTypePicker] = useState(false);
-    const [isEmergencyLeaveAllowed, setIsEmergencyLeaveAllowed] = useState(profile.isEmergencyLeaveAllowed || false);
+    const [isPickerVisible, setPickerVisible] = useState(false);
+    const [isReportingManagerPickerVisible, setReportingManagerPickerVisible] = useState(false);
+    const [isDepartmentPickerVisible, setDepartmentPickerVisible] = useState(false);
+    const [isEmergencyLeaveAllowed, setIsEmergencyLeaveAllowed] = useState(profile.emergencyLeaveAllowed || false);
     const [isLoading, setIsLoading] = useState(false);
     const [isFetchingPermission, setIsFetchingPermission] = useState(false);
-
-    const managerOptions = [
-        { label: 'Select Manager', value: '' },
-        ...(profile.managers?.map(m => ({
-            label: m.name,
-            value: m.name,
-        })) || []),
-    ];
-
-    const selectedManager = managerOptions.find(opt => opt.value === (typeof profile.reportingManager === 'object' ? profile.reportingManager?.name : profile.reportingManager)) || managerOptions[0];
-
-    const departmentOptions = [
-        { label: 'Select Department', value: '' },
-        ...(profile.departments?.map(d => ({
-            label: d.name,
-            value: d.name,
-        })) || []),
-    ];
-
-    const selectedDepartment = departmentOptions.find(opt => opt.value === (typeof profile.department === 'object' ? profile.department?.name : profile.department)) || departmentOptions[0];
-
-    const employeeTypeOptions = [
-        { label: 'Select Type', value: '' },
-        { label: 'Permanent', value: 'Permanent' },
-        { label: 'Probation', value: 'Probation' },
-        { label: 'Contract', value: 'Contract' },
-    ];
-
-    const selectedEmployeeType = employeeTypeOptions.find(opt => opt.value === profile.employeeType) || employeeTypeOptions[0];
+    const [showDateOfResigningPicker, setShowDateOfResigningPicker] = useState(false);
+    const [showConfirmationDatePicker, setShowConfirmationDatePicker] = useState(false);
 
     // Fetch emergency leave permission when component mounts for HOD
-  useEffect(() => {
-    if (user?.loginType === 'HOD' && employeeId) {
-      const fetchEmergencyLeavePermission = async () => {
-        setIsFetchingPermission(true);
-        try {
-          const response = await api.get(`/employees/${employeeId}/emergency-leave-permission-existing`);
-          const { canApplyEmergencyLeave } = response.data;
-          console.log('Fetched emergency leave permission:', canApplyEmergencyLeave);
-          setIsEmergencyLeaveAllowed(canApplyEmergencyLeave || false);
-        } catch (error) {
-          console.error('Error fetching emergency leave permission:', error);
-          Alert.alert('Error', 'Failed to fetch emergency leave permission');
-          setIsEmergencyLeaveAllowed(false); // Fallback to false on error
-        } finally {
-          setIsFetchingPermission(false);
+    useEffect(() => {
+        if (user?.loginType === 'HOD' && employeeId) {
+            const fetchEmergencyLeavePermission = async () => {
+                setIsFetchingPermission(true);
+                try {
+                    const response = await api.get(`/employees/${employeeId}/emergency-leave-permission-existing`);
+                    const { canApplyEmergencyLeave } = response.data;
+                    console.log('Fetched emergency leave permission:', canApplyEmergencyLeave);
+                    setIsEmergencyLeaveAllowed(canApplyEmergencyLeave || false);
+                } catch (error) {
+                    console.error('Error fetching emergency leave permission');
+                    Alert.alert('Error', 'Failed to fetch emergency leave permission');
+                    setIsEmergencyLeaveAllowed(false); // Fallback to false on error
+                } finally {
+                    setIsFetchingPermission(false);
+                }
+            };
+
+            fetchEmergencyLeavePermission();
         }
-      };
+    }, [user?.loginType, employeeId]);
 
-      fetchEmergencyLeavePermission();
-    }
-  }, [user?.loginType, employeeId]);
+    const handleToggleEmergencyLeave = async (value) => {
+        if (!employeeId) {
+            Alert.alert('Error', 'Employee ID is required');
+            return;
+        }
+        try {
+            setIsLoading(true);
+            await api.patch(`/employees/${employeeId}/emergency-leave-permission`, {
+                emergencyLeaveAllowed: value
+            });
+            console.log('Emergency leave permission updated successfully to', value);
+            setIsEmergencyLeaveAllowed(value);
+            Alert.alert('Success', `Emergency leave permission ${value ? 'enabled' : 'disabled'}`);
+        } catch (error) {
+            console.error('Error updating emergency leave permission:', error);
+            Alert.alert('Error', 'Failed to update emergency leave permission');
+            setIsEmergencyLeaveAllowed(!value); // Revert on error
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
-    const handleEmergencyLeaveToggle = async (value) => {
-      if (!employeeId) {
-        Alert.alert('Error', 'Employee ID is required');
-        return;
-      }
-      try {
-        setIsLoading(true);
-        await api.patch(`/employees/${employeeId}/emergency-leave-permission`, {
-          emergencyLeaveAllowed: value
+    const employeeTypes = [
+        { label: 'Select', value: '' },
+        { label: 'Intern', value: 'Intern' },
+        { label: 'Probation', value: 'Probation' },
+        { label: 'Confirmed', value: 'Confirmed' },
+        { label: 'Contractual', value: 'Contractual' },
+    ];
+
+    const reportingManagers = [
+        { label: 'Select', value: '' },
+        { label: 'John Doe', value: 'John Doe' },
+        { label: 'Jane Smith', value: 'Jane Smith' },
+        { label: 'Alice Johnson', value: 'Alice Johnson' },
+        { label: 'Bob Wilson', value: 'Bob Wilson' },
+    ];
+
+    // State to store departments
+    const [departments, setDepartments] = useState(() => {
+        // If profile is locked, just show the current department if it exists
+        if (isLocked && profile.department) {
+            return [
+                { label: profile.department.name || 'Department', value: profile.department._id || null }
+            ];
+        }
+        return [
+            { label: 'Loading departments...', value: null }
+        ];
+    });
+    const [isLoadingDepartments, setIsLoadingDepartments] = useState(!isLocked);
+    
+    // Fetch departments from API only if profile is not locked
+    useEffect(() => {
+        if (isLocked) return;
+        
+        let isMounted = true;
+        
+        const fetchDepartments = async () => {
+            try {
+                const response = await api.get('/departments');
+                
+                if (!isMounted) return;
+                
+                // Transform the API response to match the expected format
+                const formattedDepartments = response.data.map(dept => ({
+                    label: dept.name,
+                    value: dept._id
+                }));
+                
+                // If we have a current department, ensure it's in the list
+                const currentDept = profile.department?._id ? 
+                    { label: profile.department.name, value: profile.department._id } : 
+                    null;
+                
+                const allDepartments = [
+                    { label: 'Select Department', value: null },
+                    ...formattedDepartments
+                ];
+                
+                // Add current department if it's not in the list
+                if (currentDept && !formattedDepartments.some(d => d.value === currentDept.value)) {
+                    allDepartments.push(currentDept);
+                }
+                
+                setDepartments(allDepartments);
+            } catch (error) {
+                console.error('Error fetching departments:', error);
+                setDepartments([
+                    { label: profile.department?.name || 'Department', value: profile.department?._id || null },
+                    { label: 'Failed to load departments', value: 'error' }
+                ]);
+            } finally {
+                if (isMounted) {
+                    setIsLoadingDepartments(false);
+                }
+            }
+        };
+        
+        fetchDepartments();
+        
+        return () => {
+            isMounted = false;
+        };
+    }, [isLocked, profile.department]);
+
+    const handleField = (label, name, keyboardType = 'default', placeholder = '') => (
+        <View style={styles.inputGroup}>
+            <Text style={styles.label}>{label}</Text>
+            <TextInput
+                style={[styles.input, errors[name] && styles.inputError]}
+                value={profile[name] || ''}
+                onChangeText={(text) => onChange(name, text)}
+                editable={!isLocked && label !== 'Reporting Manager'}
+                keyboardType={keyboardType}
+                placeholder={placeholder || `Enter ${label.toLowerCase()}`}
+            />
+            {errors[name] && <Text style={styles.errorText}>{errors[name]}</Text>}
+        </View>
+    );
+
+    // Function to get nested property from object
+    const getNestedValue = (obj, path) => {
+        return path.split('.').reduce((o, p) => o && o[p], obj);
+    };
+
+    // Function to check if a value matches a nested property
+    const isOptionSelected = (optionValue, fieldPath) => {
+        if (fieldPath.includes('.')) {
+            return optionValue === getNestedValue(profile, fieldPath);
+        }
+        return optionValue === profile[fieldPath];
+    };
+
+    // Function to get display text for dropdown
+    const getDisplayText = (fieldPath, options, label) => {
+        const selectedOption = options.find(opt => {
+            if (fieldPath.includes('.')) {
+                return opt.value === getNestedValue(profile, fieldPath);
+            }
+            return opt.value === profile[fieldPath];
         });
-        console.log('Emergency leave permission updated successfully to', value);
-        setIsEmergencyLeaveAllowed(value);
-        Alert.alert('Success', `Emergency leave permission ${value ? 'enabled' : 'disabled'}`);
-      } catch (error) {
-        console.error('Error updating emergency leave permission:', error);
-        Alert.alert('Error', 'Failed to update emergency leave permission');
-        setIsEmergencyLeaveAllowed(!value); // Revert on error
-      } finally {
-        setIsLoading(false);
-      }
+        return selectedOption?.label || `Select ${label.toLowerCase()}`;
+    };
+
+    // renderDropdown used for Employee Type, Reporting Manager, and Department with identical styles
+    const renderDropdown = (label, field, options, showPicker, setShowPicker) => (
+        <View style={styles.inputGroup}>
+            <Text style={styles.label}>{label}</Text>
+            <TouchableOpacity
+                style={[styles.dropdownContainer, errors[field] && styles.inputError]}
+                onPress={() => !isLocked && setShowPicker(true)}
+                disabled={isLocked}
+            >
+                <Text style={styles.dropdownText}>
+                    {getDisplayText(field, options, label)}
+                </Text>
+                <MaterialIcons name="arrow-drop-down" size={24} color="#666" />
+            </TouchableOpacity>
+            {errors[field] && <Text style={styles.errorText}>{errors[field]}</Text>}
+            <Modal
+                visible={showPicker}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setShowPicker(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <TouchableWithoutFeedback onPress={() => setShowPicker(false)}>
+                        <View style={StyleSheet.absoluteFill} />
+                    </TouchableWithoutFeedback>
+                    <View style={styles.modalContent}>
+                        <ScrollView>
+                            {options.map((option) => (
+                                <TouchableOpacity
+                                    key={option.value}
+                                    style={styles.option}
+                                    onPress={() => {
+                                        onChange(field, option.value);
+                                        setShowPicker(false);
+                                    }}
+                                >
+                                    <Text style={[
+                                        styles.optionText,
+                                        isOptionSelected(option.value, field) && styles.selectedOption
+                                    ]}>
+                                        {option.label}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    </View>
+                </View>
+
+            </Modal>
+        </View>
+    );
+
+    const renderDateField = (label, field, showPicker, setShowPicker) => {
+        const getValidDate = (date) => {
+            if (!date || isNaN(new Date(date).getTime())) {
+                console.warn(`Invalid date for ${field}: ${date}, using current date`);
+                return new Date();
+            }
+            return new Date(date);
+        };
+
+        return (
+            <View style={styles.inputGroup}>
+                <Text style={styles.label}>{label}</Text>
+                <TouchableOpacity
+                    style={[styles.input, styles.dateInput, errors[field] && styles.inputError]}
+                    onPress={() => !isLocked && setShowPicker(true)}
+                    disabled={isLocked}
+                >
+                    <Text style={{ color: profile[field] ? '#000' : '#aaa' }}>
+                        {profile[field] ? formatDate(profile[field]) : `Select ${label.toLowerCase()}`}
+                    </Text>
+                    <MaterialIcons name="calendar-today" size={24} color="#666" />
+                </TouchableOpacity>
+                {showPicker && (
+                    <DateTimePicker
+                        value={getValidDate(profile[field])}
+                        mode="date"
+                        display="calendar"
+                        onChange={(event, selectedDate) => {
+                            console.log(`DateTimePicker event for ${field}:`, { eventType: event.type, selectedDate });
+                            setShowPicker(false);
+                            if (event.type === 'set' && selectedDate) {
+                                const formattedDate = selectedDate.toISOString().split('T')[0];
+                                console.log(`Updating ${field} to: ${formattedDate}`);
+                                onChange(field, formattedDate);
+                            }
+                        }}
+                        onError={(error) => {
+                            console.error(`DateTimePicker error for ${field}:`, error);
+                            setShowPicker(false);
+                        }}
+                    />
+                )}
+                {errors[field] && <Text style={styles.errorText}>{errors[field]}</Text>}
+            </View>
+        );
     };
 
     return (
-        <ScrollView 
-            style={styles.container}
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={true}
-        >
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Employment Details</Text>
+        <View style={styles.container}>
+            <ScrollView
+                style={{ flex: 1 }}
+                contentContainerStyle={{ flexGrow: 1 }}
+                scrollEnabled={true}
+                bounces={true}
+                showsVerticalScrollIndicator={true}
+            >
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Employment Details</Text>
 
-                <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Designation</Text>
-                    <TextInput
-                        style={[styles.input, errors.designation && styles.inputError]}
-                        value={profile.designation || ''}
-                        onChangeText={(text) => onChange('designation', text)}
-                        placeholder="Enter designation"
-                        editable={!isLocked}
-                    />
-                    {errors.designation && <Text style={styles.errorText}>{errors.designation}</Text>}
-                </View>
+                    {/* Dropdown for Reporting Manager with same styles as Employee Type */}
+                    {handleField('Reporting Manager', 'reportingManager.name')}
 
-                <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Location</Text>
-                    <TextInput
-                        style={[styles.input, errors.location && styles.inputError]}
-                        value={profile.location || ''}
-                        onChangeText={(text) => onChange('location', text)}
-                        placeholder="Enter location"
-                        editable={!isLocked}
-                    />
-                    {errors.location && <Text style={styles.errorText}>{errors.location}</Text>}
-                </View>
+                    {handleField('Designation', 'Designation')}
 
-                <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Reporting Manager</Text>
-                    <TouchableOpacity
-                        style={[styles.dropdownContainer, errors.reportingManager && styles.inputError]}
-                        onPress={() => !isLocked && setShowManagerPicker(true)}
-                        disabled={isLocked}
-                    >
-                        <Text style={styles.dropdownText}>{selectedManager.label}</Text>
-                        <MaterialIcons name="arrow-drop-down" size={24} color="#666" />
-                    </TouchableOpacity>
-                    {errors.reportingManager && <Text style={styles.errorText}>{errors.reportingManager}</Text>}
+                    {/* Dropdown for Department with same styles as Employee Type */}
+                    {renderDropdown('Department', 'department', departments, isDepartmentPickerVisible, setDepartmentPickerVisible)}
 
-                    <Modal
-                        visible={showManagerPicker}
-                        transparent={true}
-                        animationType="fade"
-                        onRequestClose={() => setShowManagerPicker(false)}
-                    >
-                        <TouchableWithoutFeedback onPress={() => setShowManagerPicker(false)}>
-                            <View style={styles.modalOverlay} />
-                        </TouchableWithoutFeedback>
-                        <View style={styles.modalContent}>
-                            {managerOptions.map((option) => (
-                                <TouchableOpacity
-                                    key={option.value}
-                                    style={styles.option}
-                                    onPress={() => {
-                                        onChange('reportingManager', option.value);
-                                        setShowManagerPicker(false);
-                                    }}
-                                >
-                                    <Text style={[
-                                        styles.optionText,
-                                        option.value === (typeof profile.reportingManager === 'object' ? profile.reportingManager?.name : profile.reportingManager) && styles.selectedOption
-                                    ]}>
-                                        {option.label}
-                                    </Text>
-                                    {option.value === (typeof profile.reportingManager === 'object' ? profile.reportingManager?.name : profile.reportingManager) && (
-                                        <MaterialIcons name="check" size={20} color="#007AFF" />
-                                    )}
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                    </Modal>
-                </View>
+                    {/* Dropdown for Employee Type */}
+                    {renderDropdown('Employee Type', 'employeeType', employeeTypes, isPickerVisible, setPickerVisible)}
 
-                <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Department</Text>
-                    <TouchableOpacity
-                        style={[styles.dropdownContainer, errors.department && styles.inputError]}
-                        onPress={() => !isLocked && setShowDepartmentPicker(true)}
-                        disabled={isLocked}
-                    >
-                        <Text style={styles.dropdownText}>{selectedDepartment.label}</Text>
-                        <MaterialIcons name="arrow-drop-down" size={24} color="#666" />
-                    </TouchableOpacity>
-                    {errors.department && <Text style={styles.errorText}>{errors.department}</Text>}
-
-                    <Modal
-                        visible={showDepartmentPicker}
-                        transparent={true}
-                        animationType="fade"
-                        onRequestClose={() => setShowDepartmentPicker(false)}
-                    >
-                        <TouchableWithoutFeedback onPress={() => setShowDepartmentPicker(false)}>
-                            <View style={styles.modalOverlay} />
-                        </TouchableWithoutFeedback>
-                        <View style={styles.modalContent}>
-                            {departmentOptions.map((option) => (
-                                <TouchableOpacity
-                                    key={option.value}
-                                    style={styles.option}
-                                    onPress={() => {
-                                        onChange('department', option.value);
-                                        setShowDepartmentPicker(false);
-                                    }}
-                                >
-                                    <Text style={[
-                                        styles.optionText,
-                                        option.value === (typeof profile.department === 'object' ? profile.department?.name : profile.department) && styles.selectedOption
-                                    ]}>
-                                        {option.label}
-                                    </Text>
-                                    {option.value === (typeof profile.department === 'object' ? profile.department?.name : profile.department) && (
-                                        <MaterialIcons name="check" size={20} color="#007AFF" />
-                                    )}
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                    </Modal>
-                </View>
-
-                <View style={styles.inputGroup}>
-                    <Text style={styles.label}>PF Number</Text>
-                    <TextInput
-                        style={[styles.input, errors.pfNumber && styles.inputError]}
-                        value={profile.pfNumber || ''}
-                        onChangeText={(text) => onChange('pfNumber', text)}
-                        placeholder="Enter PF number"
-                        editable={!isLocked}
-                    />
-                    {errors.pfNumber && <Text style={styles.errorText}>{errors.pfNumber}</Text>}
-                </View>
-
-                <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Employee Type</Text>
-                    <TouchableOpacity
-                        style={[styles.dropdownContainer, errors.employeeType && styles.inputError]}
-                        onPress={() => !isLocked && setShowEmployeeTypePicker(true)}
-                        disabled={isLocked}
-                    >
-                        <Text style={styles.dropdownText}>{selectedEmployeeType.label}</Text>
-                        <MaterialIcons name="arrow-drop-down" size={24} color="#666" />
-                    </TouchableOpacity>
-                    {errors.employeeType && <Text style={styles.errorText}>{errors.employeeType}</Text>}
-
-                    <Modal
-                        visible={showEmployeeTypePicker}
-                        transparent={true}
-                        animationType="fade"
-                        onRequestClose={() => setShowEmployeeTypePicker(false)}
-                    >
-                        <TouchableWithoutFeedback onPress={() => setShowEmployeeTypePicker(false)}>
-                            <View style={styles.modalOverlay} />
-                        </TouchableWithoutFeedback>
-                        <View style={styles.modalContent}>
-                            {employeeTypeOptions.map((option) => (
-                                <TouchableOpacity
-                                    key={option.value}
-                                    style={styles.option}
-                                    onPress={() => {
-                                        onChange('employeeType', option.value);
-                                        setShowEmployeeTypePicker(false);
-                                    }}
-                                >
-                                    <Text style={[
-                                        styles.optionText,
-                                        option.value === profile.employeeType && styles.selectedOption
-                                    ]}>
-                                        {option.label}
-                                    </Text>
-                                    {option.value === profile.employeeType && (
-                                        <MaterialIcons name="check" size={20} color="#007AFF" />
-                                    )}
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                    </Modal>
-                </View>
-
-                {profile.employeeType === 'Probation' && (
-                    <>
-                        <View style={styles.inputGroup}>
-                            <Text style={styles.label}>Probation Period</Text>
-                            <TextInput
-                                style={[styles.input, errors.probationPeriod && styles.inputError]}
-                                value={profile.probationPeriod || ''}
-                                onChangeText={(text) => onChange('probationPeriod', text)}
-                                placeholder="Enter probation period"
-                                editable={!isLocked}
-                            />
-                            {errors.probationPeriod && <Text style={styles.errorText}>{errors.probationPeriod}</Text>}
-                        </View>
-
-                        <View style={styles.inputGroup}>
-                            <Text style={styles.label}>Confirmation Date</Text>
-                            <TouchableOpacity
-                                onPress={() => !isLocked && setShowConfirmationDatePicker(true)}
-                                style={[styles.input, styles.dateInput, errors.confirmationDate && styles.inputError]}
-                            >
-                                <Text style={{ color: profile.confirmationDate ? '#000' : '#aaa' }}>
-                                    {profile.confirmationDate ? formatDate(profile.confirmationDate) : 'Select confirmation date'}
-                                </Text>
-                            </TouchableOpacity>
-                            {showConfirmationDatePicker && (
-                                <DateTimePicker
-                                    value={profile.confirmationDate ? new Date(profile.confirmationDate) : new Date()}
-                                    mode="date"
-                                    display="default"
-                                    onChange={(event, selectedDate) => {
-                                        setShowConfirmationDatePicker(false);
-                                        if (selectedDate) {
-                                            onChange('confirmationDate', formatDate(selectedDate));
-                                        }
-                                    }}
-                                />
-                            )}
-                            {errors.confirmationDate && <Text style={styles.errorText}>{errors.confirmationDate}</Text>}
-                        </View>
-                    </>
-                )}
-
-                {profile.employmentStatus === 'Resigned' && (
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Date of Resigning</Text>
-                        <TouchableOpacity
-                            onPress={() => !isLocked && setShowResigningDatePicker(true)}
-                            style={[styles.input, styles.dateInput, errors.dateOfResigning && styles.inputError]}
-                        >
-                            <Text style={{ color: profile.dateOfResigning ? '#000' : '#aaa' }}>
-                                {profile.dateOfResigning ? formatDate(profile.dateOfResigning) : 'Select resigning date'}
-                            </Text>
-                        </TouchableOpacity>
-                        {showResigningDatePicker && (
-                            <DateTimePicker
-                                value={profile.dateOfResigning ? new Date(profile.dateOfResigning) : new Date()}
-                                mode="date"
-                                display="default"
-                                onChange={(event, selectedDate) => {
-                                    setShowResigningDatePicker(false);
-                                    if (selectedDate) {
-                                        onChange('dateOfResigning', formatDate(selectedDate));
-                                    }
-                                }}
-                            />
-                        )}
-                        {errors.dateOfResigning && <Text style={styles.errorText}>{errors.dateOfResigning}</Text>}
-                    </View>
-                )}
-
-                {user?.loginType === 'HOD' && (
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Allow Emergency Leave</Text>
-                        <View style={styles.switchContainer}>
+                    {user?.loginType === 'HOD' && (
+                        <View style={styles.toggleContainer}>
+                            <Text style={styles.toggleLabel}>Emergency Leave Permission</Text>
                             {isFetchingPermission ? (
-                                <ActivityIndicator size="small" color="#0000ff" />
+                                <ActivityIndicator size="small" color="#666" />
                             ) : (
                                 <Switch
+                                    trackColor={{ false: '#767577', true: '#6b21a8' }}
+                                    thumbColor={isEmergencyLeaveAllowed ? '#f5dd4b' : '#f4f3f4'}
+                                    ios_backgroundColor="#3e3e3e"
+                                    onValueChange={handleToggleEmergencyLeave}
                                     value={isEmergencyLeaveAllowed}
-                                    onValueChange={handleEmergencyLeaveToggle}
                                     disabled={isLoading}
                                 />
                             )}
                         </View>
-                    </View>
-                )}
-            </View>
-        </ScrollView>
+                    )}
+
+                    {profile.employeeType === 'Probation' && (
+                        <>
+                            {handleField('Probation Period (Months)', 'probationPeriod', 'numeric')}
+                            {renderDateField('Confirmation Date', 'confirmationDate', showConfirmationDatePicker, setShowConfirmationDatePicker)}
+                        </>
+                    )}
+                </View>
+            </ScrollView>
+        </View>
     );
 };
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
+        width: '100%',
         backgroundColor: '#fff',
-    },
-    scrollContent: {
-        paddingBottom: 20,
     },
     section: {
         padding: 16,
@@ -410,49 +388,52 @@ const styles = StyleSheet.create({
         borderRadius: 6,
         padding: 10,
         backgroundColor: '#f9f9f9',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
     },
-    inputError: {
-        borderColor: 'red',
-    },
-    errorText: {
-        color: 'red',
-        fontSize: 12,
-        marginTop: 4,
-    },
+    // Dropdown styles used for Employee Type, Reporting Manager, and Department
     dropdownContainer: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
         borderWidth: 1,
-        borderColor: '#ddd',
-        borderRadius: 5,
-        padding: 12,
-        marginBottom: 5,
-        backgroundColor: '#fff',
+        borderColor: '#ccc',
+        borderRadius: 6,
+        padding: 10,
+        backgroundColor: '#f9f9f9',
     },
     dropdownText: {
         fontSize: 16,
         color: '#333',
+        flex: 1,
     },
     modalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        backgroundColor: 'rgba(0, 0, 0, 0.3)',
+        maxHeight: '100%',
+        width: '100%',
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     modalContent: {
         backgroundColor: '#fff',
-        marginHorizontal: 20,
-        marginBottom: 20,
-        borderRadius: 10,
-        padding: 10,
-        maxHeight: 300,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#ccc',
+        padding: 8,
+        maxHeight: '70%',
+        width: '90%',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 4,
+        elevation: 5,
     },
     option: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
         padding: 12,
         borderBottomWidth: 1,
-        borderBottomColor: '#f0f0f0',
+        borderBottomColor: '#eee',
     },
     optionText: {
         fontSize: 16,
@@ -462,13 +443,34 @@ const styles = StyleSheet.create({
         color: '#007AFF',
         fontWeight: '600',
     },
+    toggleContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 12,
+        borderTopWidth: 1,
+        borderTopColor: '#eee',
+        marginTop: 16,
+        paddingHorizontal: 12,
+        backgroundColor: '#f9f9f9',
+        borderRadius: 8,
+    },
+    toggleLabel: {
+        fontSize: 16,
+        color: '#333',
+        fontWeight: '500',
+    },
+    inputError: {
+        borderColor: 'red',
+    },
+    errorText: {
+        color: 'red',
+        fontSize: 12,
+        marginTop: 4,
+    },
     dateInput: {
         justifyContent: 'center',
         height: 50,
-    },
-    switchContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
     },
 });
 
