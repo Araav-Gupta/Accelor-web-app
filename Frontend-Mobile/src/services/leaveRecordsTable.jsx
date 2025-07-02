@@ -1,4 +1,4 @@
-import React, { useContext, useCallback } from 'react';
+import React, { useContext, useCallback, useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { Portal, Modal, Button } from 'react-native-paper';
 import { AuthContext } from '../context/AuthContext';
@@ -22,6 +22,7 @@ const getStatusColor = (status) => {
 
 const LeaveRecordsTable = React.memo(({ leaveRecords, selectedRecord, setSelectedRecord, modalVisible, setModalVisible }) => {
   const { user } = useContext(AuthContext);
+  const [currentFile, setCurrentFile] = useState(null);
   
   const { 
     handleViewFile, 
@@ -31,16 +32,26 @@ const LeaveRecordsTable = React.memo(({ leaveRecords, selectedRecord, setSelecte
     imageUri,
     isLoading: isFileLoading
   } = useFileHandler({
-    fileId: selectedRecord?.medicalCertificate?._id,
-    fileName: selectedRecord?.medicalCertificate?.filename,
+    fileId: currentFile?._id,
+    fileName: currentFile?.filename,
     localFile: null
   });
 
-  const onViewFile = useCallback(async () => {
-    if (selectedRecord?.medicalCertificate?._id) {
-      await handleViewFile();
+  // Trigger file viewing when currentFile changes
+  useEffect(() => {
+    if (currentFile) {
+      handleViewFile();
     }
-  }, [handleViewFile, selectedRecord]);
+  }, [currentFile, handleViewFile]);
+
+  const onViewFile = useCallback((type) => {
+    if (type === 'medical' && selectedRecord?.medicalCertificate?._id) {
+      setCurrentFile(selectedRecord.medicalCertificate);
+    }
+    if (type === 'supporting' && selectedRecord?.supportingDocuments?._id) {
+      setCurrentFile(selectedRecord.supportingDocuments);
+    }
+  }, [selectedRecord]);
   
   const userRecords = React.useMemo(() => {
     if (!user) return [];
@@ -212,7 +223,28 @@ const LeaveRecordsTable = React.memo(({ leaveRecords, selectedRecord, setSelecte
                 <View style={styles.actions}>
                   <Button 
                     mode="contained" 
-                    onPress={onViewFile} 
+                    onPress={() => onViewFile('medical')} 
+                    style={styles.actionButton}
+                    disabled={isFileLoading}
+                  >
+                    {isFileLoading ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      'View Certificate'
+                    )}
+                  </Button>
+                  {fileError && (
+                    <Text style={styles.errorText}>
+                      {fileError}
+                    </Text>
+                  )}
+                </View>
+              )}
+              {selectedRecord.supportingDocuments && (
+                <View style={styles.actions}>
+                  <Button 
+                    mode="contained" 
+                    onPress={() => onViewFile('supporting')} 
                     style={styles.actionButton}
                     disabled={isFileLoading}
                   >

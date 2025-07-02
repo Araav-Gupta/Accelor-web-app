@@ -22,6 +22,8 @@ import LeaveRecordsTable from '../services/leaveRecordsTable';
 import { SESSIONS, RESTRICTED_HOLIDAYS } from '../services/constants';
 import useDocumentPicker from '../Hooks/documentUploader.jsx';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import ImageViewer from 'react-native-image-viewing';
+import { useFileHandler } from '../Hooks/useFileHandler';
 
 const initialState = {
   leaveType: '',
@@ -70,6 +72,22 @@ const LeaveForm = ({ navigation }) => {
 
   const { medicalCertificate, supportingDocuments, pickDocument, removeDocument } = useDocumentPicker();
 
+  const {
+    isLoading: medicalFileLoading,
+    handleViewFile: handleViewMedicalFile,
+    isImageViewerVisible: isMedicalImageViewerVisible,
+    setIsImageViewerVisible: setIsMedicalImageViewerVisible,
+    imageUri: medicalImageUri,
+  } = useFileHandler({ localFile: medicalCertificate });
+
+  const {
+    isLoading: supportingFileLoading,
+    handleViewFile: handleViewSupportingFile,
+    isImageViewerVisible: isSupportingImageViewerVisible,
+    setIsImageViewerVisible: setIsSupportingImageViewerVisible,
+    imageUri: supportingImageUri,
+  } = useFileHandler({ localFile: supportingDocuments });
+
   useEffect(() => {
     setForm(prev => ({ ...prev, medicalCertificate, supportingDocuments }));
   }, [medicalCertificate, supportingDocuments]);
@@ -106,6 +124,7 @@ const LeaveForm = ({ navigation }) => {
       restrictedHoliday: '',
       projectDetails: '',
       medicalCertificate: null,
+      supportingDocuments: null,
       designation,
       submitCount: 0,
     });
@@ -290,6 +309,14 @@ const LeaveForm = ({ navigation }) => {
     fetchDepartmentEmployees();
   }, [form.dates.from, form.dates.to, form.dates.fromDuration, form.dates.fromSession, form.dates.toDuration, form.dates.toSession, form.chargeTo, user]);
 
+  useEffect(() => {
+    setForm(prev => ({
+      ...initialState,
+      leaveType: prev.leaveType, // Keep the current leaveType
+      submitCount: 0
+    }));
+  }, [form.leaveType]);
+ 
   const handleChange = (key, value) => {
     if (key === 'leaveType') {
       updateFormField('leaveType', value);
@@ -475,19 +502,21 @@ const LeaveForm = ({ navigation }) => {
         leaveData.append('projectDetails', form.projectDetails);
       }
 
-      if (form.medicalCertificate) {
+      // Only append medical certificate if it exists and has a URI
+      if (form.medicalCertificate?.uri) {
         leaveData.append('medicalCertificate', {
           uri: form.medicalCertificate.uri,
-          name: form.medicalCertificate.name || 'medical_certificate.jpg',
-          type: form.medicalCertificate.type || 'image/jpeg',
+          name: form.medicalCertificate.name || 'medical_certificate.pdf',
+          type: form.medicalCertificate.mimeType || 'application/pdf',
         });
       }
 
-      if (form.supportingDocuments){
-        leaveData.append(`supportingDocuments`, {
-          uri: doc.uri,
-          name: doc.name || `supporting_document_${index}.jpg`,
-          type: doc.type || 'image/jpeg',
+      // Only append supporting document if it exists and has a URI
+      if (form.supportingDocuments?.uri) {
+        leaveData.append('supportingDocuments', {
+          uri: form.supportingDocuments.uri,
+          name: form.supportingDocuments.name || 'supporting_document.pdf',
+          type: form.supportingDocuments.mimeType || 'application/pdf',
         });
       }
 
@@ -975,7 +1004,7 @@ const LeaveForm = ({ navigation }) => {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.labelText}>Emergency Contact</Text>
+              <Text style={styles.labelText}>Emergency Address & Contact</Text>
               <TextInput
                 style={styles.input}
                 value={form.emergencyContact}
@@ -1028,15 +1057,15 @@ const LeaveForm = ({ navigation }) => {
               </TouchableOpacity>
               {form.supportingDocuments && (
                 <View style={[styles.documentItem, styles.uploadedDocument]}>
-                  <MaterialIcons name="description" size={24} color="#2e7d32" style={styles.documentIcon} />
-                  <Text style={styles.documentText} numberOfLines={1} ellipsizeMode="middle">
-                    {form.supportingDocuments.name}
-                  </Text>
-                  <TouchableOpacity onPress={() => removeDocument(0, 'supporting')} style={styles.deleteButton}>
-                    <MaterialIcons name="delete" size={24} color="#ff4444" />
-                  </TouchableOpacity>
-                </View>
-              )}
+                    <MaterialIcons name="description" size={24} color="#2e7d32" style={styles.documentIcon} />
+                    <Text style={styles.documentText} numberOfLines={1} ellipsizeMode="middle">
+                      {form.supportingDocuments.name}
+                    </Text>
+                    <TouchableOpacity onPress={() => removeDocument(0, 'supporting')} style={styles.deleteButton}>
+                      <MaterialIcons name="delete" size={24} color="#ff4444" />
+                    </TouchableOpacity>
+                  </View>
+                )}
             </View>
             )}
 
