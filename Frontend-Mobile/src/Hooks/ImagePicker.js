@@ -1,7 +1,7 @@
 import * as ImagePicker from 'expo-image-picker';
 import { Alert } from 'react-native';
 
-export const useImagePicker = ({ setProfile, setFiles }) => {
+export const useImagePicker = ({ setFiles }) => {
   const handleImagePick = async () => {
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -25,7 +25,6 @@ export const useImagePicker = ({ setProfile, setFiles }) => {
           name: asset.fileName || 'image.jpg',
         };
 
-        setProfile(prev => ({ ...prev, profilePicture: asset.uri }));
         setFiles(prev => ({ ...prev, profilePicture: imageFile }));
       }
     } catch (error) {

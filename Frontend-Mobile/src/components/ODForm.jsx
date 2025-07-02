@@ -77,11 +77,11 @@ function ODForm() {
         }
     }, [user]);
 
-    const getFinalStatus = (status) => {
+    const getFinalStatus = (status, loginType) => {
         if (!status) return 'Pending';
         if (status.hod === 'Rejected' || status.ceo === 'Rejected') return 'Rejected';
         if (status.ceo === 'Approved') return 'Approved';
-        if (status.hod === 'Approved') return 'Approved by HOD';
+        if (status.hod === 'Approved') return loginType === 'HOD' ? 'Pending' : 'Approved by HOD';
         return 'Pending';
     };
 
@@ -402,7 +402,7 @@ function ODForm() {
                                 odRecords.map((record) => {
                                     const dateOut = record.dateOut ? new Date(record.dateOut) : null;
                                     const dateIn = record.dateIn ? new Date(record.dateIn) : null;
-                                    const status = getFinalStatus(record.status);
+                                    const status = getFinalStatus(record.status, user.loginType);
                                     return (
                                         <View key={record._id} style={styles.row}>
                                             <Text style={[styles.cell, { flex: 2 }]}>

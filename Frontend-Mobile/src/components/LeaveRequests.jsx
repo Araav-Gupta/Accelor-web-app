@@ -198,28 +198,23 @@ const LeaveRequests = ({ navigation }) => {
                             </View>
                             {Array.isArray(leaveRequests) ? (
                                 [...leaveRequests].map((leaveRequest) => {
-                                    let fromDate = null;
-                                    let toDate = null;
-                                    let date = null;
-                                    if (!leaveRequest.halfDay) {
-                                        fromDate = leaveRequest.fullDay.from ? new Date(leaveRequest.fullDay.from) : null;
-                                        toDate = leaveRequest.fullDay.to ? new Date(leaveRequest.fullDay.to) : null;
-                                    } else {
-                                        date = leaveRequest.halfDay.date ? new Date(leaveRequest.halfDay.date) : null;
-                                    }
+                                    const fromDate = leaveRequest.dates?.from ? new Date(leaveRequest.dates.from) : null;
+                                    const toDate = leaveRequest.dates?.to ? new Date(leaveRequest.dates.to) : null;
+                                    const isHalfDay = leaveRequest.dates?.fromDuration !== 'full' || leaveRequest.dates?.toDuration !== 'full';
                                     const leaveType = leaveRequest.leaveType;
                                     const status = getFinalStatus(leaveRequest.status);
                                     return (
                                         <View key={leaveRequest._id} style={styles.row}>
                                             <Text style={[styles.cell, { flex: 2 }]}>
-                                                {!leaveRequest.halfDay ? (
-                                                    fromDate && !isNaN(fromDate.getTime()) && toDate && !isNaN(toDate.getTime())
+                                                {fromDate && !isNaN(fromDate.getTime()) && toDate && !isNaN(toDate.getTime()) && fromDate.toDateString() === toDate.toDateString()
+                                                    ? fromDate.toLocaleDateString()
+                                                    : fromDate && !isNaN(fromDate.getTime()) && toDate && !isNaN(toDate.getTime())
                                                         ? `${fromDate.toLocaleDateString()} - ${toDate.toLocaleDateString()}`
-                                                        : 'N/A'
-                                                ) : (
-                                                    date && !isNaN(date.getTime())
-                                                        ? date.toLocaleDateString()
-                                                        : 'N/A'
+                                                        : 'N/A'}
+                                                {isHalfDay && (
+                                                    <Text style={{ fontSize: 12, color: '#666' }}>
+                                                        {leaveRequest.dates.fromSession ? ` (${leaveRequest.dates.fromSession})` : ''}
+                                                    </Text>
                                                 )}
                                             </Text>
                                             <Text style={[styles.cell, { flex: 2 }]}>
@@ -290,43 +285,33 @@ const LeaveRequests = ({ navigation }) => {
                                     </Text>
                                 </View>
                                 <View style={styles.detailRow}>
-                                    <Text style={styles.detailLabel}>Full/Half Day:</Text>
+                                    <Text style={styles.detailLabel}>From Date:</Text>
                                     <Text style={styles.detailValue}>
-                                        {selectedRecord.halfDay ? 'Half Day' : 'Full Day'}
+                                        {selectedRecord.dates?.from ? new Date(selectedRecord.dates.from).toLocaleDateString() : 'N/A'}
+                                        {selectedRecord.dates?.fromDuration !== 'full' && (
+                                            <Text> ({selectedRecord.dates.fromSession || 'N/A'})</Text>
+                                        )}
                                     </Text>
                                 </View>
-                                {selectedRecord.halfDay && (
-                                    <>
-                                        <View style={styles.detailRow}>
-                                            <Text style={styles.detailLabel}>Date:</Text>
-                                            <Text style={styles.detailValue}>
-                                                {selectedRecord.halfDay.date ? new Date(selectedRecord.halfDay.date).toLocaleDateString() : 'N/A'}
-                                            </Text>
-                                        </View>
-                                        <View style={styles.detailRow}>
-                                            <Text style={styles.detailLabel}>Session:</Text>
-                                            <Text style={styles.detailValue}>
-                                                {selectedRecord.halfDay.session || 'N/A'}
-                                            </Text>
-                                        </View>
-                                    </>
+                                {selectedRecord.dates?.to && selectedRecord.dates.to !== selectedRecord.dates.from && (
+                                    <View style={styles.detailRow}>
+                                        <Text style={styles.detailLabel}>To Date:</Text>
+                                        <Text style={styles.detailValue}>
+                                            {new Date(selectedRecord.dates.to).toLocaleDateString()}
+                                            {selectedRecord.dates?.toDuration !== 'full' && (
+                                                <Text> ({selectedRecord.dates.toSession || 'N/A'})</Text>
+                                            )}
+                                        </Text>
+                                    </View>
                                 )}
-                                {selectedRecord.fullDay && (
-                                    <>
-                                        <View style={styles.detailRow}>
-                                            <Text style={styles.detailLabel}>From Date:</Text>
-                                            <Text style={styles.detailValue}>
-                                                {selectedRecord.fullDay.from ? new Date(selectedRecord.fullDay.from).toLocaleDateString() : 'N/A'}
-                                            </Text>
-                                        </View>
-                                        <View style={styles.detailRow}>
-                                            <Text style={styles.detailLabel}>To Date:</Text>
-                                            <Text style={styles.detailValue}>
-                                                {selectedRecord.fullDay.to ? new Date(selectedRecord.fullDay.to).toLocaleDateString() : 'N/A'}
-                                            </Text>
-                                        </View>
-                                    </>
-                                )}
+                                <View style={styles.detailRow}>
+                                    <Text style={styles.detailLabel}>Leave Type:</Text>
+                                    <Text style={styles.detailValue}>
+                                        {selectedRecord.leaveType ? 
+                                            (typeof selectedRecord.leaveType === 'object' ? selectedRecord.leaveType.name : selectedRecord.leaveType) : 
+                                            'N/A'}
+                                    </Text>
+                                </View>
 
                                 <View style={styles.detailRow}>
                                     <Text style={styles.detailLabel}>Leave Type:</Text>

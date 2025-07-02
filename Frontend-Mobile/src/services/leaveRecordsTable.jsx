@@ -68,9 +68,9 @@ const LeaveRecordsTable = React.memo(({ leaveRecords, selectedRecord, setSelecte
           </View>
           {Array.isArray(userRecords) ? (
             [...userRecords].map((record) => {
-              const fromDate = record.fromDate ? new Date(record.fromDate) : null;
-              const toDate = record.toDate ? new Date(record.toDate) : null;
-              const isHalfDay = record.fromDuration === 'half';
+              const fromDate = record.dates?.from ? new Date(record.dates.from) : null;
+              const toDate = record.dates?.to ? new Date(record.dates.to) : null;
+              const isHalfDay = record.dates?.fromDuration !== 'full';
               const leaveType = record.leaveType || 'N/A';
               const status = getFinalStatus(record.status, user.loginType);
               return (
@@ -78,11 +78,13 @@ const LeaveRecordsTable = React.memo(({ leaveRecords, selectedRecord, setSelecte
                   <Text style={[styles.cell, { flex: 2 }]}>
                     {isHalfDay ? (
                       fromDate && !isNaN(fromDate.getTime())
-                        ? `${fromDate.toLocaleDateString()} (${record.fromSession})`
+                        ? `${fromDate.toLocaleDateString()} (${record.dates?.fromSession || 'N/A'})`
                         : 'N/A'
                     ) : (
                       fromDate && !isNaN(fromDate.getTime()) && toDate && !isNaN(toDate.getTime())
-                        ? `${fromDate.toLocaleDateString()} - ${toDate.toLocaleDateString()}`
+                        ? fromDate.toDateString() === toDate.toDateString()
+                          ? fromDate.toLocaleDateString()
+                          : `${fromDate.toLocaleDateString()} - ${toDate.toLocaleDateString()}`
                         : 'N/A'
                     )}
                   </Text>
@@ -143,33 +145,23 @@ const LeaveRecordsTable = React.memo(({ leaveRecords, selectedRecord, setSelecte
                 <Text style={styles.detailValue}>{selectedRecord.designation || 'N/A'}</Text>
               </View>
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Duration:</Text>
-                <Text style={styles.detailValue}>{selectedRecord.fromDuration === 'half' ? 'Half Day' : 'Full Day'}</Text>
-              </View>
-              <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>From Date:</Text>
                 <Text style={styles.detailValue}>
-                  {selectedRecord.fromDate ? new Date(selectedRecord.fromDate).toLocaleDateString() : 'N/A'}
+                  {selectedRecord.dates?.from ? new Date(selectedRecord.dates.from).toLocaleDateString() : 'N/A'}
+                  {selectedRecord.dates?.fromDuration !== 'full' && (
+                    <Text> ({selectedRecord.dates.fromSession || 'N/A'})</Text>
+                  )}
                 </Text>
               </View>
-              {selectedRecord.fromDuration === 'half' && (
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Session:</Text>
-                  <Text style={styles.detailValue}>{selectedRecord.fromSession || 'N/A'}</Text>
-                </View>
-              )}
-              {selectedRecord.fromDuration === 'full' && (
+              {selectedRecord.dates?.to && selectedRecord.dates.to !== selectedRecord.dates.from && (
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>To Date:</Text>
                   <Text style={styles.detailValue}>
-                    {selectedRecord.toDate ? new Date(selectedRecord.toDate).toLocaleDateString() : 'N/A'}
+                    {new Date(selectedRecord.dates.to).toLocaleDateString()}
+                    {selectedRecord.dates?.toDuration !== 'full' && (
+                      <Text> ({selectedRecord.dates.toSession || 'N/A'})</Text>
+                    )}
                   </Text>
-                </View>
-              )}
-              {selectedRecord.fromDuration === 'full' && selectedRecord.toDuration === 'half' && (
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>To Session:</Text>
-                  <Text style={styles.detailValue}>{selectedRecord.toSession || 'N/A'}</Text>
                 </View>
               )}
               <View style={styles.detailRow}>

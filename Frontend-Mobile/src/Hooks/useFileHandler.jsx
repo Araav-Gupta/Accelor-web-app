@@ -4,7 +4,6 @@ import * as FileSystem from 'expo-file-system';
 import { fetchFileAsBlob, openFile } from '../services/api';
 
 export const useFileHandler = ({ fileId, fileName, localFile }) => {
-  const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isImageViewerVisible, setIsImageViewerVisible] = useState(false);
   const [imageUri, setImageUri] = useState(null);
@@ -17,12 +16,11 @@ export const useFileHandler = ({ fileId, fileName, localFile }) => {
 
   const handleViewFile = useCallback(async () => {
     setIsLoading(true);
-    setError(null);
 
     try {
       let path;
 
-      // Handle local file if provided
+      // Handle local file if provided (from documentUploader.jsx or ImagePicker.js)
       if (localFile && localFile.uri) {
         path = localFile.uri;
         // Verify local file exists
@@ -45,17 +43,12 @@ export const useFileHandler = ({ fileId, fileName, localFile }) => {
       // Handle image file rendering (jpg/jpeg)
       if (isImageFile(localFile?.name || fileName)) {
         let uri = path;
-        try {
-          if (Platform.OS === 'android') {
-            uri = await FileSystem.getContentUriAsync(path);
-          }
-          setImageUri(uri);
-          setIsImageViewerVisible(true);
-          return;
-        } catch (imgError) {
-          console.error('Error preparing image:', imgError);
-          throw new Error('Could not display the image.');
+        if (Platform.OS === 'android') {
+          uri = await FileSystem.getContentUriAsync(path);
         }
+        setImageUri(uri);
+        setIsImageViewerVisible(true);
+        return;
       }
 
       // Handle PDF files
@@ -71,9 +64,7 @@ export const useFileHandler = ({ fileId, fileName, localFile }) => {
         fileName,
         localFile,
         error: err.message,
-        stack: err.stack,
       });
-      setError(err.message || 'Failed to open file');
       Alert.alert('Error', err.message || 'Could not open the file.');
     } finally {
       setIsLoading(false);
@@ -81,7 +72,6 @@ export const useFileHandler = ({ fileId, fileName, localFile }) => {
   }, [fileId, fileName, localFile, isImageFile]);
 
   return {
-    error,
     isLoading,
     handleViewFile,
     isImageViewerVisible,

@@ -1,4 +1,4 @@
-import React, { useState, useContext, useEffect, useReducer, useCallback } from 'react';
+import React, { useState, useContext, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -20,10 +20,8 @@ import { validateLeaveForm } from '../services/validateForm';
 import LeaveTypeSelector from '../services/leaveTypeSelector';
 import LeaveRecordsTable from '../services/leaveRecordsTable';
 import { SESSIONS, RESTRICTED_HOLIDAYS } from '../services/constants';
-import DocumentUploader from '../Hooks/documentUploader';
-import { useImagePicker } from '../Hooks/ImagePicker';
+import useDocumentPicker from '../Hooks/documentUploader.jsx';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import ImageViewing from 'react-native-image-viewing';
 
 const initialState = {
   leaveType: '',
@@ -42,10 +40,10 @@ const initialState = {
   restrictedHoliday: '',
   projectDetails: '',
   medicalCertificate: null,
+  supportingDocuments: null,
   designation: '',
   submitCount: 0,
 };
-
 
 const LeaveForm = ({ navigation }) => {
   const { user } = useContext(AuthContext);
@@ -69,8 +67,12 @@ const LeaveForm = ({ navigation }) => {
   const [employeeError, setEmployeeError] = useState('');
   const [employeeSearch, setEmployeeSearch] = useState('');
   const [showEmployeeDropdown, setShowEmployeeDropdown] = useState(false);
-  const [fileErrors, setFileErrors] = useState({});
 
+  const { medicalCertificate, supportingDocuments, pickDocument, removeDocument } = useDocumentPicker();
+
+  useEffect(() => {
+    setForm(prev => ({ ...prev, medicalCertificate, supportingDocuments }));
+  }, [medicalCertificate, supportingDocuments]);
 
   const updateFormField = (key, value) => {
     setForm(prev => ({ ...prev, [key]: value }));
@@ -108,12 +110,6 @@ const LeaveForm = ({ navigation }) => {
       submitCount: 0,
     });
   };
-
-  // Use ImagePicker for medicalCertificate
-  const { handleImagePick } = useImagePicker({
-    setProfile: () => { }, // Not used here
-    setFiles: (newFiles) => setForm({ ...form, medicalCertificate: newFiles.profilePicture }),
-  });
 
   const handleEmployeeSelect = (employee) => {
     console.log('Selected employee:', employee);
@@ -256,10 +252,8 @@ const LeaveForm = ({ navigation }) => {
           return;
         }
 
-        // Add duration and session parameters
         if (form.dates.fromDuration) {
           params.append('fromDuration', form.dates.fromDuration);
-
           if (form.dates.fromDuration === 'half' && form.dates.fromSession) {
             params.append('fromSession', form.dates.fromSession);
           }
@@ -267,20 +261,17 @@ const LeaveForm = ({ navigation }) => {
 
         if (form.dates.to && form.dates.toDuration) {
           params.append('toDuration', form.dates.toDuration);
-
           if (form.dates.toDuration === 'half' && form.dates.toSession) {
             params.append('toSession', form.dates.toSession);
           }
         }
         const res = await api.get(`/employees/department?${params.toString()}`);
-        // Process the response
         const filteredEmployees = Array.isArray(res.data)
           ? res.data.filter(emp => (emp._id || emp.id) !== userId)
           : [];
 
         setEmployees(filteredEmployees);
 
-        // Update chargeTo if the selected employee is no longer available
         if (form.chargeTo && !filteredEmployees.some(emp => (emp._id || emp.id) === form.chargeTo)) {
           setForm(prev => ({ ...prev, chargeTo: '' }));
           Alert.alert('Info', 'Selected employee is no longer available for the chosen dates.');
@@ -316,9 +307,7 @@ const LeaveForm = ({ navigation }) => {
       const field = key.split('.')[1];
       const updates = { [field]: value };
 
-      // If fromDuration is set to half or fromSession is set to forenoon, reset to fields
-      if (field === 'fromDuration' && value === 'half' ||
-        (field === 'fromSession' && value === 'forenoon')) {
+      if (field === 'fromDuration' && value === 'half' || (field === 'fromSession' && value === 'forenoon')) {
         updates.to = '';
         updates.toDuration = 'full';
         updates.toSession = '';
@@ -348,7 +337,6 @@ const LeaveForm = ({ navigation }) => {
     const formattedDate = selectedDate.toISOString().split('T')[0];
     const updates = { [field === 'fromDate' ? 'from' : 'to']: formattedDate };
     
-    // If updating 'from' date and it's after the current 'to' date, reset 'to' date
     if (field === 'fromDate' && form.dates.to && new Date(formattedDate) > new Date(form.dates.to)) {
       updates.to = '';
       updates.toDuration = 'full';
@@ -365,30 +353,23 @@ const LeaveForm = ({ navigation }) => {
   const calculateLeaveDays = useCallback(() => {
     if (!form.dates.from) return 0;
 
-    // Single day leave
     if (!form.dates.to || form.dates.from === form.dates.to) {
-      // Half day leave
       if (form.dates.fromDuration === 'half') {
         return 0.5;
       }
-      // Full day leave
       return 1;
     }
 
-    // Multi-day leave
     const from = new Date(form.dates.from);
     const to = new Date(form.dates.to);
 
-    // If dates are invalid or in wrong order
     if (isNaN(from.getTime()) || isNaN(to.getTime()) || to < from) {
       return 0;
     }
 
-    // Calculate total days including both start and end dates
     const timeDiff = to - from;
-    const daysDiff = Math.ceil(timeDiff / (1000 * 60 * 60 * 24)) + 1; // +1 to include both start and end dates
+    const daysDiff = Math.ceil(timeDiff / (1000 * 60 * 60 * 24)) + 1;
 
-    // Adjust for half days
     let totalDays = daysDiff;
     if (form.dates.fromDuration === 'half') totalDays -= 0.5;
     if (form.dates.toDuration === 'half') totalDays -= 0.5;
@@ -420,9 +401,9 @@ const LeaveForm = ({ navigation }) => {
       dates: form.dates,
       medicalCertificate: form.medicalCertificate,
       emergencyContact: form.emergencyContact,
+      supportingDocuments: form.supportingDocuments,
     });
 
-    // Basic validation
     if (!form.chargeTo) {
       Alert.alert('Error', 'Please select an employee to charge');
       return;
@@ -435,7 +416,6 @@ const LeaveForm = ({ navigation }) => {
 
     const leaveDays = calculateLeaveDays();
 
-    // Validate form
     const validationError = validateLeaveForm(
       {
         ...form,
@@ -464,13 +444,11 @@ const LeaveForm = ({ navigation }) => {
     try {
       const leaveData = new FormData();
 
-      // Add all required fields
       leaveData.append('leaveType', form.leaveType);
-      leaveData.append('chargeGivenTo', form.chargeTo); // Note: changed from chargeTo to chargeGivenTo to match backend
+      leaveData.append('chargeGivenTo', form.chargeTo);
       leaveData.append('reason', form.reason);
       leaveData.append('emergencyContact', form.emergencyContact);
 
-      // Add the fullDay object as a JSON string
       leaveData.append('dates[from]', form.dates.from);
       leaveData.append('dates[fromDuration]', form.dates.fromDuration);
       if (form.dates.fromDuration === 'half') {
@@ -485,7 +463,6 @@ const LeaveForm = ({ navigation }) => {
         }
       }
 
-      // Add conditional fields
       if (form.leaveType === 'Compensatory' && form.compensatoryEntry) {
         leaveData.append('compensatoryEntryId', form.compensatoryEntry);
       }
@@ -506,6 +483,14 @@ const LeaveForm = ({ navigation }) => {
         });
       }
 
+      if (form.supportingDocuments){
+        leaveData.append(`supportingDocuments`, {
+          uri: doc.uri,
+          name: doc.name || `supporting_document_${index}.jpg`,
+          type: doc.type || 'image/jpeg',
+        });
+      }
+
       console.log('Submitting leave data:', {
         ...Object.fromEntries(leaveData),
         dates: form.dates
@@ -522,7 +507,6 @@ const LeaveForm = ({ navigation }) => {
       Alert.alert('Success', 'Leave submitted successfully');
       await fetchLeaveRecords();
       resetForm(user?.designation || '');
-      setFileErrors({});
     } catch (err) {
       console.error('Leave submit error:', {
         message: err.message,
@@ -668,7 +652,6 @@ const LeaveForm = ({ navigation }) => {
             )}
 
             <View style={styles.fullWidth}>
-              {/* Date Picker Row */}
               <View style={styles.rowContainer}>
                 <View style={[styles.formGroup, (form.dates.fromDuration === 'full' || form.dates.fromSession === 'afternoon') ? styles.halfWidth : styles.fullWidth]}>
                   <Text style={styles.labelText}>From Date</Text>
@@ -714,8 +697,8 @@ const LeaveForm = ({ navigation }) => {
                     }
                     maximumDate={
                       form.leaveType === 'Medical' || form.leaveType === 'Emergency'
-                        ? new Date()  // Today's date for both Medical and Emergency leaves
-                        : null        // No max date for other types
+                        ? new Date()
+                        : null
                     }
                   />
                   {Platform.OS === 'ios' && (
@@ -740,10 +723,10 @@ const LeaveForm = ({ navigation }) => {
                     minimumDate={new Date(form.dates.from)}
                     maximumDate={
                       form.leaveType === 'Medical'
-                        ? new Date(new Date().setDate(new Date().getDate() + 6))  // 7 days from today
+                        ? new Date(new Date().setDate(new Date().getDate() + 6))
                         : form.leaveType === 'Emergency'
-                          ? new Date()  // Current date for Emergency
-                          : null  // No max date for other types
+                          ? new Date()
+                          : null
                     }
                   />
                   {Platform.OS === 'ios' && (
@@ -758,7 +741,6 @@ const LeaveForm = ({ navigation }) => {
                 </View>
               )}
 
-              {/* Duration Selector Row */}
               <View style={[styles.rowContainer, !form.dates.to && styles.fullWidth, { marginTop: 10 }]}>
                 <View style={[styles.formGroup, form.dates.to ? styles.halfWidth : styles.fullWidth]}>
                   <Text style={styles.labelText}>From Duration</Text>
@@ -823,7 +805,6 @@ const LeaveForm = ({ navigation }) => {
               </View>
             </View>
 
-            {/* Session Selection Row */}
             {(form.dates.fromDuration === 'half' || form.dates.toDuration === 'half') && (
               <View style={styles.rowContainer}>
                 {form.dates.fromDuration === 'half' && (
@@ -1004,27 +985,60 @@ const LeaveForm = ({ navigation }) => {
               />
             </View>
 
-            {form.leaveType === 'Medical' && (
-              <DocumentUploader
-                title="Medical Certificate (Image)"
-                field="medicalCertificate"
-                files={{ medicalCertificate: form.medicalCertificate }}
-                setFiles={(newFiles) => updateFormField('medicalCertificate', newFiles.medicalCertificate)}
-                fileErrors={fileErrors}
-                isLocked={submitting}
-                handleImagePick={handleImagePick} // Override default PDF picker with image picker
-              />
+            {/* Document Picker Section */}
+            {form.leaveType.toLowerCase() === 'medical' && (
+              <View style={styles.formGroup}>
+                <Text style={styles.labelText}>Medical Certificate</Text>
+                <TouchableOpacity
+                  style={[styles.documentButton, styles.uploadBoxContainer]}
+                  onPress={() => pickDocument('medical')}
+                >
+                  <View style={styles.uploadBoxContent}>
+                    <MaterialIcons name="file-upload" size={40} color="#2e7d32" />
+                    <Text style={styles.uploadBoxText}>
+                      {form.medicalCertificate ? 'Replace Medical Certificate' : 'Upload Medical Certificate'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+                {form.medicalCertificate && (
+                  <View style={[styles.documentItem, styles.uploadedDocument]}>
+                    <MaterialIcons name="description" size={24} color="#2e7d32" style={styles.documentIcon} />
+                    <Text style={styles.documentText} numberOfLines={1} ellipsizeMode="middle">
+                      {form.medicalCertificate.name}
+                    </Text>
+                    <TouchableOpacity onPress={() => removeDocument(0, 'medical')} style={styles.deleteButton}>
+                      <MaterialIcons name="delete" size={24} color="#ff4444" />
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
             )}
 
-            <ImageViewing
-              images={form.medicalCertificate && form.medicalCertificate.type?.startsWith('image/') ? [{ uri: form.medicalCertificate.uri }] : []}
-              imageIndex={0}
-              visible={form.medicalCertificate && form.medicalCertificate.type?.startsWith('image/') && fileErrors.medicalCertificate === undefined}
-              onRequestClose={() => setFileErrors(prev => ({ ...prev, medicalCertificate: null }))}
-              animationType="fade"
-              swipeToCloseEnabled={true}
-              doubleTapToZoomEnabled={true}
-            />
+            {form.leaveType.toLowerCase() === 'maternity' || form.leaveType.toLowerCase() === 'paternity' && (
+            <View style={styles.formGroup}>
+              <Text style={styles.labelText}>Supporting Documents</Text>
+              <TouchableOpacity
+                style={[styles.documentButton, styles.uploadBoxContainer]}
+                onPress={() => pickDocument('supporting')}
+              >
+                <View style={styles.uploadBoxContent}>
+                  <MaterialIcons name="file-upload" size={40} color="#2e7d32" />
+                  <Text style={styles.uploadBoxText}>Upload Supporting Documents</Text>
+                </View>
+              </TouchableOpacity>
+              {form.supportingDocuments && (
+                <View style={[styles.documentItem, styles.uploadedDocument]}>
+                  <MaterialIcons name="description" size={24} color="#2e7d32" style={styles.documentIcon} />
+                  <Text style={styles.documentText} numberOfLines={1} ellipsizeMode="middle">
+                    {form.supportingDocuments.name}
+                  </Text>
+                  <TouchableOpacity onPress={() => removeDocument(0, 'supporting')} style={styles.deleteButton}>
+                    <MaterialIcons name="delete" size={24} color="#ff4444" />
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+            )}
 
             <TouchableOpacity
               style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
@@ -1124,10 +1138,6 @@ const styles = StyleSheet.create({
     marginTop: 5,
     alignItems: 'center',
   },
-  formGroup: {
-    marginBottom: 15,
-    width: '100%',
-  },
   durationButton: {
     padding: 10,
     borderWidth: 1,
@@ -1149,10 +1159,6 @@ const styles = StyleSheet.create({
   inactiveText: {
     color: '#666',
   },
-  datesContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
   compensatorySection: {
     marginVertical: 10,
     padding: 10,
@@ -1168,6 +1174,45 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#28a745',
     fontWeight: 'bold',
+  },
+  documentButton: {
+    backgroundColor: '#f8f9fa',
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    borderStyle: 'dashed',
+  },
+  uploadBoxContainer: {
+    backgroundColor: '#f8f9fa',
+  },
+  uploadBoxContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 10,
+  },
+  uploadBoxText: {
+    marginTop: 8,
+    color: '#2e7d32',
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  uploadedDocument: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f1f8e9',
+    padding: 12,
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: '#2e7d32',
+  },
+  documentIcon: {
+    marginRight: 12,
+  },
+  deleteButton: {
+    marginLeft: 'auto',
+    padding: 4,
   },
   submitButton: {
     backgroundColor: '#1e88e5',
@@ -1251,18 +1296,6 @@ const styles = StyleSheet.create({
   },
   dropdownItemText: {
     fontSize: 16,
-  },
-  fileInfo: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 6,
-  },
-  fileName: {
-    fontSize: 14,
-    color: '#333',
-    flex: 1,
-    fontFamily: 'monospace',
   },
 });
 
