@@ -346,15 +346,6 @@ const LeaveRequests = ({ navigation }) => {
                                 </View>
 
                                 <View style={styles.detailRow}>
-                                    <Text style={styles.detailLabel}>Leave Type:</Text>
-                                    <Text style={styles.detailValue}>
-                                        {selectedRecord.leaveType ?
-                                            (typeof selectedRecord.leaveType === 'object' ? selectedRecord.leaveType.name : selectedRecord.leaveType) :
-                                            'N/A'}
-                                    </Text>
-                                </View>
-
-                                <View style={styles.detailRow}>
                                     <Text style={styles.detailLabel}>Reason:</Text>
                                     <Text style={styles.detailValue}>
                                         {selectedRecord.reason || 'N/A'}

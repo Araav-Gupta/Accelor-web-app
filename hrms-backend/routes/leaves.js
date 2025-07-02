@@ -16,7 +16,10 @@ router.post(
   "/",
   auth,
   role(["Employee", "HOD", "Admin"]),
-  upload.single("medicalCertificate"),
+  upload.fields([
+    { name: 'medicalCertificate', maxCount: 1 },
+    { name: 'supportingDocuments', maxCount: 1 }
+  ]),
   async (req, res) => {
     try {
       const user = await Employee.findById(req.user.id);
@@ -205,19 +208,34 @@ router.post(
         (new Date() - joinDate) / (1000 * 60 * 60 * 24 * 365);
 
       let medicalCertificateId = null;
+      let supportingDocumentsId = null;
+      
+      // Handle medical certificate upload
       if (leaveType === "Medical") {
-        if (!req.file) {
-          return res
-            .status(400)
-            .json({
-              message: "Medical certificate is required for Medical leave",
-            });
+        if (!req.files?.medicalCertificate) {
+          return res.status(400).json({
+            message: "Medical certificate is required for Medical leave",
+          });
         }
-        const fileData = await uploadToGridFS(req.file, {
+        const fileData = await uploadToGridFS(req.files.medicalCertificate[0], {
           employeeId: user.employeeId,
           leaveType: "Medical",
         });
         medicalCertificateId = fileData._id;
+      }
+      
+      // Handle supporting documents upload for maternity/paternity leave
+      if (["Maternity", "Paternity"].includes(leaveType)) {
+        if (!req.files?.supportingDocuments) {
+          return res.status(400).json({
+            message: "Supporting documents are required for Maternity/Paternity leave",
+          });
+        }
+        const fileData = await uploadToGridFS(req.files.supportingDocuments[0], {
+          employeeId: user.employeeId,
+          leaveType: "Supporting",
+        });
+        supportingDocumentsId = fileData._id;
       }
 
       // Validate chargeGivenTo
@@ -569,6 +587,7 @@ router.post(
         projectDetails: req.body.projectDetails,
         restrictedHoliday: req.body.restrictedHoliday,
         medicalCertificate: medicalCertificateId,
+        supportingDocuments: supportingDocumentsId,
         status,
       });
 
@@ -715,10 +734,13 @@ router.get("/", auth, async (req, res) => {
       .skip((page - 1) * limit)
       .limit(parseInt(limit));
 
-    // Manually fetch medical certificate filenames for Medical leaves
-    const leavesWithCertificates = await Promise.all(
+    // Manually fetch file information for leaves
+    const leavesWithDocuments = await Promise.all(
       leaves.map(async (leave) => {
         let medicalCertificate = null;
+        let supportingDocuments = null;
+        
+        // Handle medical certificate for Medical leaves
         if (leave.leaveType === "Medical" && leave.medicalCertificate) {
           try {
             const file = await gfs
@@ -731,20 +753,41 @@ router.get("/", auth, async (req, res) => {
               };
             }
           } catch (err) {
-            console.error(
-              `Error fetching file ${leave.medicalCertificate} for leave ${leave._id}:`,
-              err
-            );
+            console.error('Error fetching medical certificate:', err);
           }
         }
+        
+        // Handle supporting documents for Maternity/Paternity leaves
+        if ((leave.leaveType === "Maternity" || leave.leaveType === "Paternity") && leave.supportingDocuments) {
+          try {
+            const file = await gfs
+              .find({ _id: leave.supportingDocuments })
+              .toArray();
+            if (file[0]) {
+              supportingDocuments = {
+                _id: file[0]._id,
+                filename: file[0].filename,
+              };
+            }
+          } catch (err) {
+            console.error('Error fetching supporting documents:', err);
+          }
+        }
+
         return {
-          ...leave.toObject(),
+          ...leave._doc,
           medicalCertificate,
+          supportingDocuments,
         };
       })
     );
 
-    res.json({ leaves: leavesWithCertificates, total });
+    res.json({
+      total,
+      page: parseInt(page),
+      totalPages: Math.ceil(total / limit),
+      leaves: leavesWithDocuments,
+    });
   } catch (err) {
     console.error("Fetch leaves error:", err.stack);
     res.status(500).json({ message: "Server error", error: err.message });

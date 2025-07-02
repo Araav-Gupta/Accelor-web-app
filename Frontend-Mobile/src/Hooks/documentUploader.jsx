@@ -5,7 +5,7 @@ import { Alert } from 'react-native';
 
 const useDocumentPicker = () => {
   const [medicalCertificate, setMedicalCertificate] = useState(null);
-  const [supportingDocuments, setSupportingDocuments] = useState([]);
+  const [supportingDocuments, setSupportingDocuments] = useState(null);
 
   const pickDocument = async (type = 'medical') => {
     try {

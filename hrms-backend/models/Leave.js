@@ -41,6 +41,7 @@ const leaveSchema = new mongoose.Schema({
   projectDetails: { type: String },
   restrictedHoliday: { type: String },
   medicalCertificate: { type: mongoose.Schema.Types.ObjectId, ref: 'Uploads.files', default: null },
+  supportingDocuments: { type: mongoose.Schema.Types.ObjectId, ref: 'Uploads.files', default: null },
 
   status: {
     hod: { type: String, enum: ['Pending', 'Approved', 'Submitted', 'Rejected'], default: 'Pending' },

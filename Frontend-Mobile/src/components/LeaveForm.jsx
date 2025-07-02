@@ -1014,7 +1014,7 @@ const LeaveForm = ({ navigation }) => {
               />
             </View>
 
-            {/* Document Picker Section */}
+            {/* Medical Certificate Section */}
             {form.leaveType.toLowerCase() === 'medical' && (
               <View style={styles.formGroup}>
                 <Text style={styles.labelText}>Medical Certificate</Text>
@@ -1035,6 +1035,17 @@ const LeaveForm = ({ navigation }) => {
                     <Text style={styles.documentText} numberOfLines={1} ellipsizeMode="middle">
                       {form.medicalCertificate.name}
                     </Text>
+                    <TouchableOpacity
+                      onPress={handleViewMedicalFile}
+                      style={styles.previewButton}
+                      disabled={medicalFileLoading}
+                    >
+                      {medicalFileLoading ? (
+                        <ActivityIndicator size="small" color="#2e7d32" />
+                      ) : (
+                        <MaterialIcons name="visibility" size={24} color="#2e7d32" />
+                      )}
+                    </TouchableOpacity>
                     <TouchableOpacity onPress={() => removeDocument(0, 'medical')} style={styles.deleteButton}>
                       <MaterialIcons name="delete" size={24} color="#ff4444" />
                     </TouchableOpacity>
@@ -1043,31 +1054,59 @@ const LeaveForm = ({ navigation }) => {
               </View>
             )}
 
-            {form.leaveType.toLowerCase() === 'maternity' || form.leaveType.toLowerCase() === 'paternity' && (
-            <View style={styles.formGroup}>
-              <Text style={styles.labelText}>Supporting Documents</Text>
-              <TouchableOpacity
-                style={[styles.documentButton, styles.uploadBoxContainer]}
-                onPress={() => pickDocument('supporting')}
-              >
-                <View style={styles.uploadBoxContent}>
-                  <MaterialIcons name="file-upload" size={40} color="#2e7d32" />
-                  <Text style={styles.uploadBoxText}>Upload Supporting Documents</Text>
-                </View>
-              </TouchableOpacity>
-              {form.supportingDocuments && (
-                <View style={[styles.documentItem, styles.uploadedDocument]}>
+            {/* Supporting Documents Section */}
+            {(form.leaveType.toLowerCase() === 'maternity' || form.leaveType.toLowerCase() === 'paternity') && (
+              <View style={styles.formGroup}>
+                <Text style={styles.labelText}>Supporting Documents</Text>
+                <TouchableOpacity
+                  style={[styles.documentButton, styles.uploadBoxContainer]}
+                  onPress={() => pickDocument('supporting')}
+                >
+                  <View style={styles.uploadBoxContent}>
+                    <MaterialIcons name="file-upload" size={40} color="#2e7d32" />
+                    <Text style={styles.uploadBoxText}>Upload Supporting Documents</Text>
+                  </View>
+                </TouchableOpacity>
+                {form.supportingDocuments && (
+                  <View style={[styles.documentItem, styles.uploadedDocument]}>
                     <MaterialIcons name="description" size={24} color="#2e7d32" style={styles.documentIcon} />
                     <Text style={styles.documentText} numberOfLines={1} ellipsizeMode="middle">
                       {form.supportingDocuments.name}
                     </Text>
+                    <TouchableOpacity
+                      onPress={handleViewSupportingFile}
+                      style={styles.previewButton}
+                      disabled={supportingFileLoading}
+                    >
+                      {supportingFileLoading ? (
+                        <ActivityIndicator size="small" color="#2e7d32" />
+                      ) : (
+                        <MaterialIcons name="visibility" size={24} color="#2e7d32" />
+                      )}
+                    </TouchableOpacity>
                     <TouchableOpacity onPress={() => removeDocument(0, 'supporting')} style={styles.deleteButton}>
                       <MaterialIcons name="delete" size={24} color="#ff4444" />
                     </TouchableOpacity>
                   </View>
                 )}
-            </View>
+              </View>
             )}
+
+            {/* Image Viewer for Medical Certificate */}
+            <ImageViewer
+              images={medicalImageUri ? [medicalImageUri] : []}
+              imageIndex={0}
+              visible={isMedicalImageViewerVisible}
+              onRequestClose={() => setIsMedicalImageViewerVisible(false)}
+            />
+
+            {/* Image Viewer for Supporting Documents */}
+            <ImageViewer
+              images={supportingImageUri ? [supportingImageUri] : []}
+              imageIndex={0}
+              visible={isSupportingImageViewerVisible}
+              onRequestClose={() => setIsSupportingImageViewerVisible(false)}
+            />
 
             <TouchableOpacity
               style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
@@ -1133,6 +1172,10 @@ const styles = StyleSheet.create({
     marginBottom: 5,
     color: '#555',
     fontWeight: '500',
+  },
+  previewButton: {
+    padding: 4,
+    marginLeft: 8,
   },
   input: {
     backgroundColor: '#fff',
@@ -1204,6 +1247,12 @@ const styles = StyleSheet.create({
     color: '#28a745',
     fontWeight: 'bold',
   },
+  documentText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#555',
+    marginHorizontal: 8,
+  },
   documentButton: {
     backgroundColor: '#f8f9fa',
     padding: 15,
@@ -1227,6 +1276,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontWeight: '500',
   },
+  documentItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    width: '100%',
+  },
   uploadedDocument: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1235,6 +1290,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderLeftWidth: 4,
     borderLeftColor: '#2e7d32',
+    flex: 1,
   },
   documentIcon: {
     marginRight: 12,
