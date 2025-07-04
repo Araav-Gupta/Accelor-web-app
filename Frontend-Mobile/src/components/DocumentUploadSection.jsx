@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
-import DocumentUploader from '../Hooks/documentUploader';
+import {uploadDocument} from '../Hooks/documentUploader';
 
 const documentFields = [
   { title: '10th & 12th Marksheets', field: 'tenthTwelfthDocs' },

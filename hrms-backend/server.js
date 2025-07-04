@@ -89,38 +89,38 @@ mongoose.connect(process.env.MONGO_URI)
         console.log('GridFS initialized successfully');
 
         // Schedule syncAttendance at 9:30 AM and 2:00 PM daily
-        cron.schedule('30 9 * * *', async () => {
-          console.log('Running syncAttendance at 9:30 AM...');
-          await syncAttendance();
-          console.log('syncAttendance at 9:30 AM completed.');
-        }, { timezone: 'Asia/Kolkata' });
+        // cron.schedule('30 9 * * *', async () => {
+        //   console.log('Running syncAttendance at 9:30 AM...');
+        //   await syncAttendance();
+        //   console.log('syncAttendance at 9:30 AM completed.');
+        // }, { timezone: 'Asia/Kolkata' });
 
-        cron.schedule('00 14 * * *', async () => {
-          console.log('Running syncAttendance at 2:00 PM...');
-          await syncAttendance();
-          console.log('syncAttendance at 2:00 PM completed.');
-        }, { timezone: 'Asia/Kolkata' });
+        // cron.schedule('00 14 * * *', async () => {
+        //   console.log('Running syncAttendance at 2:00 PM...');
+        //   await syncAttendance();
+        //   console.log('syncAttendance at 2:00 PM completed.');
+        // }, { timezone: 'Asia/Kolkata' });
 
-        // Schedule processLateArrivalsAndAbsents at 9:35 AM daily
-        cron.schedule('32 9 * * *', async () => {
-          console.log('Running processLateArrivalsAndAbsents at 9:35 AM...');
-          await processLateArrivalsAndAbsents();
-          console.log('processLateArrivalsAndAbsents at 9:35 AM completed.');
-        }, { timezone: 'Asia/Kolkata' });
+        // // Schedule processLateArrivalsAndAbsents at 9:35 AM daily
+        // cron.schedule('32 9 * * *', async () => {
+        //   console.log('Running processLateArrivalsAndAbsents at 9:35 AM...');
+        //   await processLateArrivalsAndAbsents();
+        //   console.log('processLateArrivalsAndAbsents at 9:35 AM completed.');
+        // }, { timezone: 'Asia/Kolkata' });
 
-        // Schedule processUnclaimedOT at 12:30 AM daily
-        cron.schedule('35 9 * * *', async () => {
-          console.log('Running processUnclaimedOT at 9:30 AM... for the timing at 9:30 AM');
-          await processUnclaimedOT();
-          console.log('processUnclaimedOT at 9:30 AM completed.');
-        }, { timezone: 'Asia/Kolkata' });
+        // // Schedule processUnclaimedOT at 12:30 AM daily
+        // cron.schedule('35 9 * * *', async () => {
+        //   console.log('Running processUnclaimedOT at 9:30 AM... for the timing at 9:30 AM');
+        //   await processUnclaimedOT();
+        //   console.log('processUnclaimedOT at 9:30 AM completed.');
+        // }, { timezone: 'Asia/Kolkata' });
 
-        // Schedule checkAbsences at midnight daily
-        cron.schedule('36 9 * * *', async () => {
-          console.log('Running checkAbsences at midnight...');
-          await checkAbsences();
-          console.log('checkAbsences at midnight completed.');
-        }, { timezone: 'Asia/Kolkata' });
+        // // Schedule checkAbsences at midnight daily
+        // cron.schedule('36 9 * * *', async () => {
+        //   console.log('Running checkAbsences at midnight...');
+        //   await checkAbsences();
+        //   console.log('checkAbsences at midnight completed.');
+        // }, { timezone: 'Asia/Kolkata' });
 
         const PORT = process.env.PORT || 5000;
         server.listen(PORT, () => console.log(`Server running on port ${PORT}`));

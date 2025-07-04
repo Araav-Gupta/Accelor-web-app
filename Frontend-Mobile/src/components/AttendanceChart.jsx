@@ -1,3 +1,4 @@
+// REDUNDANT FILE TO BE REMOVED
 import React from 'react';
 import { Dimensions } from 'react-native';
 import { PieChart } from 'react-native-chart-kit';

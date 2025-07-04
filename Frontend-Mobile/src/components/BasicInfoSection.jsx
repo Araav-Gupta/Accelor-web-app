@@ -4,16 +4,7 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as FileSystem from 'expo-file-system';
 import { fetchFileAsBlob } from '../services/api';
-
-const formatDate = (dateInput) => {
-    if (!dateInput) return '';
-    if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
-        return dateInput;
-    }
-    const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
-    if (isNaN(date.getTime())) return '';
-    return date.toISOString().split('T')[0];
-};
+import { formatForDisplay, formatForBackend, parseDateFromBackend, getCurrentISTDate } from '../utils/dateUtils';
 
 const BasicInfoSection = ({ profile, errors, onChange, onImagePick, isLocked }) => {
     const [showDatePicker, setShowDatePicker] = useState(false);
@@ -172,7 +163,7 @@ const BasicInfoSection = ({ profile, errors, onChange, onImagePick, isLocked }) 
                         </View>
                     ) : (
                         <View style={styles.profileContainer}>
-                            <MaterialIcons name="person" size={50} color="#666666" style={styles.defaultIcon} />
+                            <MaterialIcons name="person" size="50" color="#666666" style={styles.defaultIcon} />
                         </View>
                     )}
 
@@ -198,18 +189,18 @@ const BasicInfoSection = ({ profile, errors, onChange, onImagePick, isLocked }) 
                             style={[styles.input, styles.dateInput, errors.dateOfBirth && styles.inputError]}
                         >
                             <Text style={{ color: profile.dateOfBirth ? '#000' : '#aaa' }}>
-                                {profile.dateOfBirth ? formatDate(profile.dateOfBirth) : 'Select date of birth'}
+                                {profile.dateOfBirth ? formatForDisplay(profile.dateOfBirth) : 'Select date of birth'}
                             </Text>
                         </TouchableOpacity>
                         {showDatePicker && (
                             <DateTimePicker
-                                value={profile.dateOfBirth ? new Date(profile.dateOfBirth) : new Date()}
+                                value={profile.dateOfBirth ? parseDateFromBackend(profile.dateOfBirth).toDate() : getCurrentISTDate().toDate()}
                                 mode="date"
                                 display="default"
                                 onChange={(event, selectedDate) => {
                                     setShowDatePicker(false);
-                                    if (selectedDate) {
-                                        onChange('dateOfBirth', selectedDate.toISOString().split('T')[0]);
+                                    if (event.type !== 'dismissed' && selectedDate) {
+                                        onChange('dateOfBirth', formatForBackend(selectedDate));
                                     }
                                 }}
                             />
@@ -224,18 +215,18 @@ const BasicInfoSection = ({ profile, errors, onChange, onImagePick, isLocked }) 
                             style={[styles.input, styles.dateInput, errors.dateOfJoining && styles.inputError]}
                         >
                             <Text style={{ color: profile.dateOfJoining ? '#000' : '#aaa' }}>
-                                {profile.dateOfJoining ? formatDate(profile.dateOfJoining) : 'Select date of joining'}
+                                {profile.dateOfJoining ? formatForDisplay(profile.dateOfJoining) : 'Select date of joining'}
                             </Text>
                         </TouchableOpacity>
                         {showDateOfJoiningPicker && (
                             <DateTimePicker
-                                value={profile.dateOfJoining ? new Date(profile.dateOfJoining) : new Date()}
+                                value={profile.dateOfJoining ? parseDateFromBackend(profile.dateOfJoining).toDate() : getCurrentISTDate().toDate()}
                                 mode="date"
                                 display="default"
                                 onChange={(event, selectedDate) => {
                                     setShowDateOfJoiningPicker(false);
-                                    if (selectedDate) {
-                                        onChange('dateOfJoining', selectedDate.toISOString().split('T')[0]);
+                                    if (event.type !== 'dismissed' && selectedDate) {
+                                        onChange('dateOfJoining', formatForBackend(selectedDate));
                                     }
                                 }}
                             />

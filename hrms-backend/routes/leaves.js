@@ -1,4 +1,3 @@
-
 import express from "express";
 import Leave from "../models/Leave.js";
 import Employee from "../models/Employee.js";
@@ -9,7 +8,38 @@ import role from "../middleware/role.js";
 import Department from "../models/Department.js";
 import { upload, uploadToGridFS, gfsReady } from "../middleware/fileupload.js";
 import { getGfs } from "../utils/gridfs.js";
+import { toIST, formatForDB, formatForDisplay, startOfDay, endOfDay, now, validateDate } from '../utils/dateUtils.js';
 const router = express.Router();
+
+// Helper function to calculate leave days
+const calculateLeaveDays = (leaveStart, leaveEnd, fromDuration, toDuration, fromSession, toSession) => {
+  if (!leaveEnd || leaveStart.toISOString().split('T')[0] === leaveEnd.toISOString().split('T')[0]) {
+    if (fromDuration === 'full' && toDuration === 'full') return 1;
+    if (fromDuration === 'half' && toDuration === 'half' && fromSession === 'afternoon' && toSession === 'forenoon') return 0.5;
+    return fromDuration === 'half' ? 0.5 : 1;
+  }
+  let days = (leaveEnd - leaveStart) / (1000 * 60 * 60 * 24) + 1;
+  if (fromDuration === 'half') days -= 0.5;
+  if (toDuration === 'half') days -= 0.5;
+  return days;
+};
+
+// Helper function to format leave dates for response
+const formatLeaveDates = (leave) => {
+  return {
+    ...leave._doc,
+    dates: {
+      ...leave.dates,
+      from: formatForDisplay(leave.dates.from, 'YYYY-MM-DD'),
+      to: leave.dates.to ? formatForDisplay(leave.dates.to, 'YYYY-MM-DD') : null,
+      fromDuration: leave.dates.fromDuration,
+      fromSession: leave.dates.fromSession,
+      toDuration: leave.dates.toDuration,
+      toSession: leave.dates.toSession,
+    },
+    createdAt: formatForDisplay(leave.createdAt, 'YYYY-MM-DD HH:mm:ss'),
+  };
+};
 
 // Submit Leave
 router.post(
@@ -38,10 +68,8 @@ router.post(
       }
 
       const currentYear = new Date().getFullYear();
-      const today = new Date();
-      today.setUTCHours(0, 0, 0, 0); // Use UTC to align with YYYY-MM-DD
-      const sevenDaysAgo = new Date(today);
-      sevenDaysAgo.setDate(today.getDate() - 7);
+      const today = startOfDay(toIST(new Date()));
+      const sevenDaysAgo = toIST(new Date()).subtract(7, 'days');
 
       let leaveDays = 0;
       let leaveStart, leaveEnd;
@@ -53,8 +81,8 @@ router.post(
               message: "Invalid full day from date format (expected YYYY-MM-DD)",
             });
         }
-        leaveStart = new Date(req.body.dates.from);
-        if (isNaN(leaveStart.getTime())) {
+        leaveStart = toIST(parseDate(req.body.dates.from));
+        if (!validateDate(leaveStart)) {
           return res.status(400).json({ message: "Invalid full day from date" });
         }
         const fromDuration = req.body.dates.fromDuration || 'full';
@@ -82,8 +110,8 @@ router.post(
                 message: "Invalid full day to date format (expected YYYY-MM-DD)",
               });
           }
-          leaveEnd = new Date(req.body.dates.to);
-          if (isNaN(leaveEnd.getTime())) {
+          leaveEnd = toIST(parseDate(req.body.dates.to));
+          if (!validateDate(leaveEnd)) {
             return res.status(400).json({ message: "Invalid full day to date" });
           }
           const toDuration = req.body.dates.toDuration || 'full';
@@ -97,18 +125,9 @@ router.post(
           if (toDuration === 'half' && !toSession) {
             return res.status(400).json({ message: "toSession is required for half-day toDuration" });
           }
-          if (leaveStart.toISOString().split('T')[0] === leaveEnd.toISOString().split('T')[0]) {
-            if (fromDuration === 'full' && toDuration === 'full') {
-              leaveDays = 1;
-            } else if (fromDuration === 'half' && toDuration === 'half' && fromSession === 'afternoon' && toSession === 'forenoon') {
-              leaveDays = 0.5;
-            } else {
-              return res.status(400).json({ message: "Invalid duration combination for same-day leave" });
-            }
-          } else {
-            leaveDays = (leaveEnd - leaveStart) / (1000 * 60 * 60 * 24) + 1;
-            if (fromDuration === 'half') leaveDays -= 0.5;
-            if (toDuration === 'half') leaveDays -= 0.5;
+          leaveDays = calculateLeaveDays(leaveStart, leaveEnd, fromDuration, toDuration, fromSession, toSession);
+          if (leaveDays === null) {
+            return res.status(400).json({ message: "Invalid duration combination for same-day leave" });
           }
         }
       } else {
@@ -121,26 +140,14 @@ router.post(
             .status(400)
             .json({
               message:
-                "Medical leave from date must be within today and 7 days prior",
+                `Medical leave from date must be within today (${formatForDisplay(today)}) and 7 days prior`,
             });
         }
         if (!req.body.dates?.to) {
           return res.status(400).json({ message: "To date is required for Medical leave" });
         }
       } else if (req.body.leaveType === "Emergency") {
-        const todayStr = today.toISOString().split('T')[0];
-        const leaveStartStr = leaveStart.toISOString().split('T')[0];
-        const leaveEndStr = leaveEnd ? leaveEnd.toISOString().split('T')[0] : leaveStartStr;
-        console.log("Emergency Validation:", {
-          todayStr,
-          leaveStartStr,
-          leaveEndStr,
-          rawFullDayFrom: req.body.dates?.from,
-          rawFullDayTo: req.body.dates?.to,
-          serverTime: new Date().toString(),
-          istTime: today.toString(),
-        });
-        if (leaveStartStr !== todayStr || leaveEndStr !== todayStr) {
+        if (!startOfDay(leaveStart).equals(startOfDay(today)) || (leaveEnd && !startOfDay(leaveEnd).equals(startOfDay(today)))) {
           return res
             .status(400)
             .json({
@@ -167,8 +174,8 @@ router.post(
           chargeGivenTo: user._id,
           $or: [
             {
-              "dates.from": { $lte: leaveEnd },
-              "dates.to": { $gte: leaveStart },
+              "dates.from": { $lte: formatForDB(leaveEnd) },
+              "dates.to": { $gte: formatForDB(leaveStart) },
               $and: [
                 { "status.hod": { $ne: "Rejected" } },
                 { "status.ceo": { $ne: "Rejected" } },
@@ -178,7 +185,7 @@ router.post(
                 { 'dates.fromDuration': 'full' },
                 { 'dates.fromDuration': 'half', 'dates.fromSession': { $in: ['forenoon', 'afternoon'] } }
               ],
-              ...(leaveStart.toISOString().split('T')[0] !== leaveEnd.toISOString().split('T')[0] && {
+              ...(formatForDB(leaveStart).toISOString().split('T')[0] !== formatForDB(leaveEnd).toISOString().split('T')[0] && {
                 $or: [
                   { 'dates.toDuration': 'full' },
                   { 'dates.toDuration': 'half', 'dates.toSession': 'forenoon' }
@@ -191,9 +198,9 @@ router.post(
           const leaveDetails = overlappingChargeAssignments[0];
           const dateRangeStr =
             `from ${
-              new Date(leaveDetails.dates.from).toISOString().split("T")[0]
+              formatForDisplay(leaveDetails.dates.from, 'YYYY-MM-DD')
             }${leaveDetails.dates.fromDuration === 'half' ? ` (${leaveDetails.dates.fromSession})` : ''}${leaveDetails.dates.to ? ` to ${
-              new Date(leaveDetails.dates.to).toISOString().split("T")[0]
+              formatForDisplay(leaveDetails.dates.to, 'YYYY-MM-DD')
             }${leaveDetails.dates.toDuration === 'half' ? ` (${leaveDetails.dates.toSession})` : ''}` : ''}`;
           return res.status(400).json({
             message: `You are assigned as Charge Given To for a leave ${dateRangeStr} and cannot apply for non-Emergency leaves during this period.`,
@@ -248,8 +255,8 @@ router.post(
           .json({ message: "Selected employee for Charge Given To not found" });
       }
       // Check for overlapping charge assignments or employee's own leaves
-      const startDateOnly = new Date(leaveStart.setHours(0, 0, 0, 0));
-      const endDateOnly = new Date(leaveEnd.setHours(0, 0, 0, 0));
+      const startDateOnly = startOfDay(leaveStart);
+      const endDateOnly = startOfDay(leaveEnd);
       const overlappingLeaves = await Leave.find({
         $or: [
           // Leaves where chargeGivenTo is assigned
@@ -257,8 +264,8 @@ router.post(
             chargeGivenTo: req.body.chargeGivenTo,
             $or: [
               {
-                "dates.from": { $lte: leaveEnd },
-                "dates.to": { $gte: leaveStart },
+                "dates.from": { $lte: formatForDB(leaveEnd) },
+                "dates.to": { $gte: formatForDB(leaveStart) },
                 $and: [
                   { "status.hod": { $in: ["Pending", "Approved"] } },
                   { "status.ceo": { $in: ["Pending", "Approved"] } },
@@ -268,7 +275,7 @@ router.post(
                   { 'dates.fromDuration': 'full' },
                   { 'dates.fromDuration': 'half', 'dates.fromSession': { $in: ['forenoon', 'afternoon'] } }
                 ],
-                ...(leaveStart.toISOString().split('T')[0] !== leaveEnd.toISOString().split('T')[0] && {
+                ...(formatForDB(leaveStart).toISOString().split('T')[0] !== formatForDB(leaveEnd).toISOString().split('T')[0] && {
                   $or: [
                     { 'dates.toDuration': 'full' },
                     { 'dates.toDuration': 'half', 'dates.toSession': 'forenoon' }
@@ -276,8 +283,8 @@ router.post(
                 })
               },
               {
-                "dates.from": { $gte: startDateOnly, $lte: endDateOnly },
-                "dates.to": { $gte: startDateOnly, $lte: endDateOnly },
+                "dates.from": { $gte: formatForDB(startDateOnly), $lte: formatForDB(endDateOnly) },
+                "dates.to": { $gte: formatForDB(startDateOnly), $lte: formatForDB(endDateOnly) },
                 "dates.fromDuration": 'half',
                 "dates.fromSession": { $in: ['forenoon', 'afternoon'] },
                 $and: [
@@ -293,8 +300,8 @@ router.post(
             employee: req.body.chargeGivenTo,
             $or: [
               {
-                "dates.from": { $lte: leaveEnd },
-                "dates.to": { $gte: leaveStart },
+                "dates.from": { $lte: formatForDB(leaveEnd) },
+                "dates.to": { $gte: formatForDB(leaveStart) },
                 $and: [
                   { "status.hod": { $in: ["Pending", "Approved"] } },
                   { "status.ceo": { $in: ["Pending", "Approved"] } },
@@ -304,7 +311,7 @@ router.post(
                   { 'dates.fromDuration': 'full' },
                   { 'dates.fromDuration': 'half', 'dates.fromSession': { $in: ['forenoon', 'afternoon'] } }
                 ],
-                ...(leaveStart.toISOString().split('T')[0] !== leaveEnd.toISOString().split('T')[0] && {
+                ...(formatForDB(leaveStart).toISOString().split('T')[0] !== formatForDB(leaveEnd).toISOString().split('T')[0] && {
                   $or: [
                     { 'dates.toDuration': 'full' },
                     { 'dates.toDuration': 'half', 'dates.toSession': 'forenoon' }
@@ -312,8 +319,8 @@ router.post(
                 })
               },
               {
-                "dates.from": { $gte: startDateOnly, $lte: endDateOnly },
-                "dates.to": { $gte: startDateOnly, $lte: endDateOnly },
+                "dates.from": { $gte: formatForDB(startDateOnly), $lte: formatForDB(endDateOnly) },
+                "dates.to": { $gte: formatForDB(startDateOnly), $lte: formatForDB(endDateOnly) },
                 "dates.fromDuration": 'half',
                 "dates.fromSession": { $in: ['forenoon', 'afternoon'] },
                 $and: [
@@ -573,8 +580,8 @@ router.post(
         department: user.department,
         leaveType: req.body.leaveType,
         dates: {
-          from: req.body.dates?.from,
-          to: req.body.dates?.to || req.body.dates?.from,
+          from: formatForDB(leaveStart),
+          to: formatForDB(leaveEnd),
           fromDuration: req.body.dates?.fromDuration || 'full',
           fromSession: req.body.dates?.fromSession,
           toDuration: req.body.dates?.toDuration || 'full',
@@ -595,7 +602,7 @@ router.post(
 
       // Notify the chargeGivenTo employee
       const dateRangeStr =
-        `from ${req.body.dates.from}${req.body.dates.fromDuration === 'half' ? ` (${req.body.dates.fromSession})` : ''}${req.body.dates.to ? ` to ${req.body.dates.to}${req.body.dates.toDuration === 'half' ? ` (${req.body.dates.toSession})` : ''}` : ''}`;
+        `from ${formatForDisplay(leaveStart, 'YYYY-MM-DD')}${req.body.dates.fromDuration === 'half' ? ` (${req.body.dates.fromSession})` : ''}${leaveEnd ? ` to ${formatForDisplay(leaveEnd, 'YYYY-MM-DD')}${req.body.dates.toDuration === 'half' ? ` (${req.body.dates.toSession})` : ''}` : ''}`;
       await Notification.create({
         userId: chargeGivenToEmployee.employeeId,
         message: `You have been assigned as Charge Given To for ${user.name}'s leave ${dateRangeStr}. You cannot apply for non-Emergency leaves during this period until the leave is rejected.`,
@@ -645,7 +652,7 @@ router.post(
         details: "Submitted leave request",
       });
 
-      res.status(201).json(leave);
+      res.status(201).json(formatLeaveDates(leave));
     } catch (err) {
       console.error("Leave submit error:", err.stack);
       res.status(500).json({ message: "Server error", error: err.message });
@@ -715,15 +722,19 @@ router.get("/", auth, async (req, res) => {
     }
 
     if (fromDate) {
-      const startDate = new Date(fromDate);
-      startDate.setHours(0, 0, 0, 0);
-      query['dates.from'] = { $gte: startDate };
+      const startDate = parseDate(fromDate);
+      if (!validateDate(startDate)) {
+        return res.status(400).json({ message: "Invalid from date format" });
+      }
+      query['dates.from'] = { $gte: formatForDB(startDate) };
     }
 
     if (toDate) {
-      const endDate = new Date(toDate);
-      endDate.setHours(23, 59, 59, 999);
-      query['dates.to'] = { $lte: endDate };
+      const endDate = parseDate(toDate);
+      if (!validateDate(endDate)) {
+        return res.status(400).json({ message: "Invalid to date format" });
+      }
+      query['dates.to'] = { $lte: formatForDB(endDate) };
     }
 
     const total = await Leave.countDocuments(query);
@@ -774,11 +785,11 @@ router.get("/", auth, async (req, res) => {
           }
         }
 
-        return {
+        return formatLeaveDates({
           ...leave._doc,
           medicalCertificate,
           supportingDocuments,
-        };
+        });
       })
     );
 
@@ -791,7 +802,7 @@ router.get("/", auth, async (req, res) => {
   } catch (err) {
     console.error("Fetch leaves error:", err.stack);
     res.status(500).json({ message: "Server error", error: err.message });
-  }
+    }
 });
 
 // Approve Leave
@@ -886,7 +897,7 @@ router.put(
             global._io
               .to(ceo.employeeId)
               .emit("notification", {
-                message: `Leave request from ${leave.name} awaiting your approval`,
+                message: `Leave request from ${leave.name} (${formatForDisplay(leave.dates.from, 'DD MMMM YYYY')}${leave.dates.to ? ' to ' + formatForDisplay(leave.dates.to, 'DD MMMM YYYY') : ''}) awaiting your approval`,
               });
           }
         }
@@ -904,7 +915,7 @@ router.put(
             global._io
               .to(admin.employeeId)
               .emit("notification", {
-                message: `Leave request from ${leave.name} awaiting your acknowledgment`,
+                message: `Leave request from ${leave.name} (${formatForDisplay(leave.dates.from, 'DD MMMM YYYY')}${leave.dates.to ? ' to ' + formatForDisplay(leave.dates.to, 'DD MMMM YYYY') : ''}) awaiting your acknowledgment`,
               });
           }
         }
@@ -912,6 +923,14 @@ router.put(
 
       if (status === "Acknowledged" && currentStage === "admin") {
         const employee = leave.employee;
+        const leaveDays = calculateLeaveDays(
+          parseDate(leave.dates.from),
+          leave.dates.to ? parseDate(leave.dates.to) : parseDate(leave.dates.from),
+          leave.dates.fromDuration,
+          leave.dates.toDuration,
+          leave.dates.fromSession,
+          leave.dates.toSession
+        );
         switch (leave.leaveType) {
           case "Casual":
             await employee.deductPaidLeaves(
@@ -923,15 +942,7 @@ router.put(
           case "Medical":
             await employee.deductMedicalLeaves(
               leave,
-              leave.dates.fromDuration === 'half' && leave.dates.from === leave.dates.to
-                ? 0.5
-                : leave.dates?.from && leave.dates?.to
-                ? (new Date(leave.dates.to) - new Date(leave.dates.from)) /
-                    (1000 * 60 * 60 * 24) +
-                  1 -
-                  (leave.dates.fromDuration === 'half' ? 0.5 : 0) -
-                  (leave.dates.toDuration === 'half' ? 0.5 : 0)
-                : 0
+              leaveDays
             );
             break;
           case "Maternity":
@@ -953,16 +964,6 @@ router.put(
             await employee.deductCompensatoryLeaves(leave.compensatoryEntryId);
             break;
           case "Emergency":
-            const leaveDays =
-              leave.dates.fromDuration === 'half' && leave.dates.from === leave.dates.to
-                ? 0.5
-                : leave.dates?.from && leave.dates.to
-                ? (new Date(leave.dates.to) - new Date(leave.dates.from)) /
-                    (1000 * 60 * 60 * 24) +
-                  1 -
-                  (leave.dates.fromDuration === 'half' ? 0.5 : 0) -
-                  (leave.dates.toDuration === 'half' ? 0.5 : 0)
-                : 1;
             if (employee.paidLeaves >= leaveDays) {
               await employee.deductPaidLeaves(
                 leave.dates.from,
@@ -994,12 +995,16 @@ router.put(
       }
 
       if (status === "Rejected") {
+        // Format dates for display
+        const fromStr = formatForDisplay(leave.dates.from, 'YYYY-MM-DD');
+        const toStr = leave.dates.to ? formatForDisplay(leave.dates.to, 'YYYY-MM-DD') : fromStr;
+        
         // Notify the employee who submitted the leave
         await Notification.create({
           userId: leave.employee.employeeId,
           message: `Your ${
             leave.leaveType
-          } leave request was rejected by ${currentStage.toUpperCase()}`,
+          } leave request (${formatForDisplay(leave.dates.from, 'DD MMMM YYYY')}${leave.dates.to ? ' to ' + formatForDisplay(leave.dates.to, 'DD MMMM YYYY') : ''}) was rejected by ${currentStage.toUpperCase()}`,
         });
         if (global._io) {
           global._io
@@ -1007,16 +1012,16 @@ router.put(
             .emit("notification", {
               message: `Your ${
                 leave.leaveType
-              } leave request was rejected by ${currentStage.toUpperCase()}`,
+              } leave request (${formatForDisplay(leave.dates.from, 'DD MMMM YYYY')}${leave.dates.to ? ' to ' + formatForDisplay(leave.dates.to, 'DD MMMM YYYY') : ''}) was rejected by ${currentStage.toUpperCase()}`,
             });
         }
 
         // Notify the chargeGivenTo employee that they are no longer assigned
         if (leave.chargeGivenTo) {
-          const dateRangeStr =
+           const dateRangeStr =
             `from ${
-                new Date(leave.dates.from).toISOString().split("T")[0]
-              }${leave.dates.fromDuration === 'half' ? ` (${leave.dates.fromSession})` : ''}${leave.dates.to ? ` to ${new Date(leave.dates.to).toISOString().split("T")[0]}${leave.dates.toDuration === 'half' ? ` (${leave.dates.toSession})` : ''}` : ''}`;
+                formatForDisplay(leave.dates.from, 'DD MMMM YYYY')
+              }${leave.dates.fromDuration === 'half' ? ` (${leave.dates.fromSession})` : ''}${leave.dates.to ? ` to ${formatForDisplay(leave.dates.to, 'DD MMMM YYYY')}${leave.dates.toDuration === 'half' ? ` (${leave.dates.toSession})` : ''}` : ''}`;
           await Notification.create({
             userId: leave.chargeGivenTo.employeeId,
             message: `You are no longer assigned as Charge Given To for ${
@@ -1050,11 +1055,11 @@ router.put(
           global._io
             .to(employee.employeeId)
             .emit("notification", {
-              message: `Your leave request has been ${status.toLowerCase()} by ${currentStage.toUpperCase()}`,
+              message: `Your leave request (${formatForDisplay(leave.dates.from, 'DD MMMM YYYY')}${leave.dates.to ? ' to ' + formatForDisplay(leave.dates.to, 'DD MMMM YYYY') : ''}) has been ${status.toLowerCase()} by ${currentStage.toUpperCase()}`,
             });
       }
 
-      res.json(leave);
+      res.json(formatLeaveDates(leave));
     } catch (err) {
       console.error("Leave approval error:", err.stack);
       res.status(500).json({ message: "Server error", error: err.message });

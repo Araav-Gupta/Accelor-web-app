@@ -15,16 +15,7 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import api from '../services/api';
-
-const formatDate = (dateInput) => {
-    if (!dateInput) return '';
-    if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
-        return dateInput;
-    }
-    const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
-    if (isNaN(date.getTime())) return '';
-    return date.toISOString().split('T')[0];
-};
+import { formatForDisplay, formatForBackend, parseDateFromBackend, getCurrentISTDate } from '../utils/dateUtils';
 
 const EmploymentDetailsSection = ({ profile, errors, onChange, isLocked, user, employeeId }) => {
     const [isPickerVisible, setPickerVisible] = useState(false);
@@ -49,12 +40,11 @@ const EmploymentDetailsSection = ({ profile, errors, onChange, isLocked, user, e
                 } catch (error) {
                     console.error('Error fetching emergency leave permission');
                     Alert.alert('Error', 'Failed to fetch emergency leave permission');
-                    setIsEmergencyLeaveAllowed(false); // Fallback to false on error
+                    setIsEmergencyLeaveAllowed(false);
                 } finally {
                     setIsFetchingPermission(false);
                 }
             };
-
             fetchEmergencyLeavePermission();
         }
     }, [user?.loginType, employeeId]);
@@ -75,7 +65,7 @@ const EmploymentDetailsSection = ({ profile, errors, onChange, isLocked, user, e
         } catch (error) {
             console.error('Error updating emergency leave permission:', error);
             Alert.alert('Error', 'Failed to update emergency leave permission');
-            setIsEmergencyLeaveAllowed(!value); // Revert on error
+            setIsEmergencyLeaveAllowed(!value);
         } finally {
             setIsLoading(false);
         }
@@ -97,9 +87,7 @@ const EmploymentDetailsSection = ({ profile, errors, onChange, isLocked, user, e
         { label: 'Bob Wilson', value: 'Bob Wilson' },
     ];
 
-    // State to store departments
     const [departments, setDepartments] = useState(() => {
-        // If profile is locked, just show the current department if it exists
         if (isLocked && profile.department) {
             return [
                 { label: profile.department.name || 'Department', value: profile.department._id || null }
@@ -110,40 +98,34 @@ const EmploymentDetailsSection = ({ profile, errors, onChange, isLocked, user, e
         ];
     });
     const [isLoadingDepartments, setIsLoadingDepartments] = useState(!isLocked);
-    
-    // Fetch departments from API only if profile is not locked
+
     useEffect(() => {
         if (isLocked) return;
-        
         let isMounted = true;
-        
+
         const fetchDepartments = async () => {
             try {
                 const response = await api.get('/departments');
-                
                 if (!isMounted) return;
-                
-                // Transform the API response to match the expected format
+
                 const formattedDepartments = response.data.map(dept => ({
                     label: dept.name,
                     value: dept._id
                 }));
-                
-                // If we have a current department, ensure it's in the list
+
                 const currentDept = profile.department?._id ? 
                     { label: profile.department.name, value: profile.department._id } : 
                     null;
-                
+
                 const allDepartments = [
                     { label: 'Select Department', value: null },
                     ...formattedDepartments
                 ];
-                
-                // Add current department if it's not in the list
+
                 if (currentDept && !formattedDepartments.some(d => d.value === currentDept.value)) {
                     allDepartments.push(currentDept);
                 }
-                
+
                 setDepartments(allDepartments);
             } catch (error) {
                 console.error('Error fetching departments:', error);
@@ -157,9 +139,8 @@ const EmploymentDetailsSection = ({ profile, errors, onChange, isLocked, user, e
                 }
             }
         };
-        
+
         fetchDepartments();
-        
         return () => {
             isMounted = false;
         };
@@ -180,12 +161,10 @@ const EmploymentDetailsSection = ({ profile, errors, onChange, isLocked, user, e
         </View>
     );
 
-    // Function to get nested property from object
     const getNestedValue = (obj, path) => {
         return path.split('.').reduce((o, p) => o && o[p], obj);
     };
 
-    // Function to check if a value matches a nested property
     const isOptionSelected = (optionValue, fieldPath) => {
         if (fieldPath.includes('.')) {
             return optionValue === getNestedValue(profile, fieldPath);
@@ -193,7 +172,6 @@ const EmploymentDetailsSection = ({ profile, errors, onChange, isLocked, user, e
         return optionValue === profile[fieldPath];
     };
 
-    // Function to get display text for dropdown
     const getDisplayText = (fieldPath, options, label) => {
         const selectedOption = options.find(opt => {
             if (fieldPath.includes('.')) {
@@ -204,7 +182,6 @@ const EmploymentDetailsSection = ({ profile, errors, onChange, isLocked, user, e
         return selectedOption?.label || `Select ${label.toLowerCase()}`;
     };
 
-    // renderDropdown used for Employee Type, Reporting Manager, and Department with identical styles
     const renderDropdown = (label, field, options, showPicker, setShowPicker) => (
         <View style={styles.inputGroup}>
             <Text style={styles.label}>{label}</Text>
@@ -251,57 +228,46 @@ const EmploymentDetailsSection = ({ profile, errors, onChange, isLocked, user, e
                         </ScrollView>
                     </View>
                 </View>
-
             </Modal>
         </View>
     );
 
-    const renderDateField = (label, field, showPicker, setShowPicker) => {
-        const getValidDate = (date) => {
-            if (!date || isNaN(new Date(date).getTime())) {
-                console.warn(`Invalid date for ${field}: ${date}, using current date`);
-                return new Date();
-            }
-            return new Date(date);
-        };
-
-        return (
-            <View style={styles.inputGroup}>
-                <Text style={styles.label}>{label}</Text>
-                <TouchableOpacity
-                    style={[styles.input, styles.dateInput, errors[field] && styles.inputError]}
-                    onPress={() => !isLocked && setShowPicker(true)}
-                    disabled={isLocked}
-                >
-                    <Text style={{ color: profile[field] ? '#000' : '#aaa' }}>
-                        {profile[field] ? formatDate(profile[field]) : `Select ${label.toLowerCase()}`}
-                    </Text>
-                    <MaterialIcons name="calendar-today" size={24} color="#666" />
-                </TouchableOpacity>
-                {showPicker && (
-                    <DateTimePicker
-                        value={getValidDate(profile[field])}
-                        mode="date"
-                        display="calendar"
-                        onChange={(event, selectedDate) => {
-                            console.log(`DateTimePicker event for ${field}:`, { eventType: event.type, selectedDate });
-                            setShowPicker(false);
-                            if (event.type === 'set' && selectedDate) {
-                                const formattedDate = selectedDate.toISOString().split('T')[0];
-                                console.log(`Updating ${field} to: ${formattedDate}`);
-                                onChange(field, formattedDate);
-                            }
-                        }}
-                        onError={(error) => {
-                            console.error(`DateTimePicker error for ${field}:`, error);
-                            setShowPicker(false);
-                        }}
-                    />
-                )}
-                {errors[field] && <Text style={styles.errorText}>{errors[field]}</Text>}
-            </View>
-        );
-    };
+    const renderDateField = (label, field, showPicker, setShowPicker) => (
+        <View style={styles.inputGroup}>
+            <Text style={styles.label}>{label}</Text>
+            <TouchableOpacity
+                style={[styles.input, styles.dateInput, errors[field] && styles.inputError]}
+                onPress={() => !isLocked && setShowPicker(true)}
+                disabled={isLocked}
+            >
+                <Text style={{ color: profile[field] ? '#000' : '#aaa' }}>
+                    {profile[field] ? formatForDisplay(profile[field]) : `Select ${label.toLowerCase()}`}
+                </Text>
+                <MaterialIcons name="calendar-today" size={24} color="#666" />
+            </TouchableOpacity>
+            {showPicker && (
+                <DateTimePicker
+                    value={profile[field] ? parseDateFromBackend(profile[field]).toDate() : getCurrentISTDate().toDate()}
+                    mode="date"
+                    display="calendar"
+                    onChange={(event, selectedDate) => {
+                        console.log(`DateTimePicker event for ${field}:`, { eventType: event.type, selectedDate });
+                        setShowPicker(false);
+                        if (event.type === 'set' && selectedDate) {
+                            const formattedDate = formatForBackend(selectedDate);
+                            console.log(`Updating ${field} to: ${formattedDate}`);
+                            onChange(field, formattedDate);
+                        }
+                    }}
+                    onError={(error) => {
+                        console.error(`DateTimePicker error for ${field}:`, error);
+                        setShowPicker(false);
+                    }}
+                />
+            )}
+            {errors[field] && <Text style={styles.errorText}>{errors[field]}</Text>}
+        </View>
+    );
 
     return (
         <View style={styles.container}>
@@ -315,15 +281,9 @@ const EmploymentDetailsSection = ({ profile, errors, onChange, isLocked, user, e
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Employment Details</Text>
 
-                    {/* Dropdown for Reporting Manager with same styles as Employee Type */}
                     {handleField('Reporting Manager', 'reportingManager.name')}
-
                     {handleField('Designation', 'Designation')}
-
-                    {/* Dropdown for Department with same styles as Employee Type */}
                     {renderDropdown('Department', 'department', departments, isDepartmentPickerVisible, setDepartmentPickerVisible)}
-
-                    {/* Dropdown for Employee Type */}
                     {renderDropdown('Employee Type', 'employeeType', employeeTypes, isPickerVisible, setPickerVisible)}
 
                     {user?.loginType === 'HOD' && (
@@ -349,6 +309,10 @@ const EmploymentDetailsSection = ({ profile, errors, onChange, isLocked, user, e
                             {handleField('Probation Period (Months)', 'probationPeriod', 'numeric')}
                             {renderDateField('Confirmation Date', 'confirmationDate', showConfirmationDatePicker, setShowConfirmationDatePicker)}
                         </>
+                    )}
+
+                    {profile.employeeType === 'Resigned' && (
+                        renderDateField('Date of Resigning', 'dateOfResigning', showDateOfResigningPicker, setShowDateOfResigningPicker)
                     )}
                 </View>
             </ScrollView>
@@ -392,7 +356,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
     },
-    // Dropdown styles used for Employee Type, Reporting Manager, and Department
     dropdownContainer: {
         flexDirection: 'row',
         alignItems: 'center',

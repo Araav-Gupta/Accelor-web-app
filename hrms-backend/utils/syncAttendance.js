@@ -5,6 +5,9 @@ import Employee from '../models/Employee.js';
 import SyncMetadata from '../models/SyncMetadata.js';
 import Leave from '../models/Leave.js';
 
+// Toggle variable for direction
+let directionToggle = true;
+
 const syncAttendance = async () => {
   try {
     // Step 1: Check if RawPunchlog is empty and initialize lastSyncedAt
@@ -68,7 +71,7 @@ const syncAttendance = async () => {
         UserID: log.UserID?.toString().trim(),
         LogDate: new Date(new Date(log.LogDate).toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })),
         LogTime: logTime,
-        Direction: (log.Direction || 'out').toLowerCase(),
+        Direction: log.Direction ? log.Direction.toLowerCase() : (directionToggle = !directionToggle) ? 'in' : 'out',
         processed: false,
       };
     }).filter((log) => log && log.UserID && log.LogTime && !isNaN(log.LogDate));
